@@ -15,7 +15,6 @@ struct sender : machine {
         *msg = val;
         send_message(dst, msg, 8);
         set_timer(0, 200);
-        fprintf(stderr, "init called on sender!\n");
     }
 
     void handle_timer(uint64_t id) override {
@@ -27,7 +26,7 @@ struct sender : machine {
         }
     }
 
-    void handle_message(uint64_t src, size_t sz, void* data) override {
+    void handle_message(uint64_t src, void* data, size_t sz) override {
         if (src != dst) fail("Message came from wrong source!");
         if (sz != sizeof(int)) fail("Message has inappropriate length!");
         int* msg = (int*) data;
@@ -35,7 +34,7 @@ struct sender : machine {
     }
 
     void print(int indent) override {
-        iprintf(indent, "Message acknowledged: %s value: %lu\n",
+        iprintf(indent, "Acknowledged: %s value: %lu\n",
                 ack ? "true" : "false", val);
     }
 };
@@ -47,12 +46,11 @@ struct receiver : machine {
     void init() override {
         recv = false;
         val = 0;
-        fprintf(stderr, "init called on receiver!\n");
     }
 
     void handle_timer(uint64_t id) override {}
 
-    void handle_message(uint64_t src, size_t sz, void* data) override {
+    void handle_message(uint64_t src, void* data, size_t sz) override {
         if (sz != 8) fail("Message has inappropriate length!");
         uint64_t* msg = (uint64_t*) data;
         val = *msg;
@@ -62,7 +60,7 @@ struct receiver : machine {
     }
 
     void print(int indent) override {
-        iprintf(indent, "Message received: %s value: %lu\n",
+        iprintf(indent, "Received: %s value: %lu\n",
                 recv ? "true" : "false", val);
     }
 };
@@ -76,9 +74,8 @@ state* init_state() {
     dst->id = 1;
     src->st = s;
     src->dst = 1;
-    s->m.reserve(2);
-    s->m[src->id] = src;
-    s->m[dst->id] = dst;
+    s->m.push_back(src);
+    s->m.push_back(dst);
     return s;
 }
 
