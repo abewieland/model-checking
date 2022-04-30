@@ -12,7 +12,7 @@ std::vector<SystemState> SystemState::get_neighbors() {
 
   std::vector<SystemState> results;
 
-  for (int i = 0; i < this->message_queue.size(); i++) {
+  for (size_t i = 0; i < this->message_queue.size(); i++) {
     // Consider each message m
     auto m = this->message_queue[i];
 
@@ -38,14 +38,21 @@ std::vector<SystemState> SystemState::get_neighbors() {
   return results;
 }
 
-bool SystemState::operator==(SystemState const& rhs) const {
+int SystemState::compare(const SystemState& rhs) const {
   // A necessary evil; SystemStates need to be comparable.
-  return (machines == rhs.machines) && (message_queue == rhs.message_queue);
+  for (size_t i = 0; i < message_queue.size(); ++i) {
+    if (int r = message_queue[i]->compare(rhs.message_queue[i])) return r;
+  }
+  for (size_t i = 0; i < machines.size(); ++i) {
+    if (int r = machines[i]->compare(rhs.machines[i])) return r;
+  }
+  return 0;
 }
 
-bool SystemState::operator<(SystemState const& rhs) const {
-  return (message_queue == rhs.message_queue) ? (machines < rhs.machines)
-    : message_queue < rhs.message_queue;
+bool SystemState::operator==(const SystemState& rhs) const { return !compare(rhs); }
+
+bool SystemState::operator<(const SystemState& rhs) const {
+  return compare(rhs) < 0;
 }
 
 // To construct a Model from an initial state and some invariants, run all of the

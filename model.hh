@@ -37,12 +37,9 @@ class Message {
     // Must be defined for any message, so that the system states can be comapred.
     // Note that this should be logical comparison, so that two states that represent
     // the same logical state of the system compare equal.
-    bool operator<(const Message& rhs) const {
-        return this < &rhs;
-    }
-
-    bool operator==(const Message& rhs) const {
-       return this == &rhs;
+    int compare(Message* rhs) const {
+        if (int r = src - rhs->src) return r;
+        return dst - rhs->dst;
     }
 };
 
@@ -81,12 +78,9 @@ class Machine {
     // Note that this should be logical comparison, so that two states that represent
     // the same logical state of the system compare equal.
     // virtual bool operator==(const Machine& rhs) const;
-    virtual bool operator<(Machine const& right) {return this->id < right.id; };
-
-    virtual bool operator==(const Machine& rhs) const {
-     return this->id == rhs.id;
-   };
-
+    virtual int compare(Machine* rhs) const {
+        return id - rhs->id;
+    }
 };
 
 
@@ -123,8 +117,9 @@ public:
   std::vector<SystemState> get_neighbors();
 
   // SystemStates are comparable so we can skip visited states.
-  bool operator==(SystemState const& rhs) const;
-  bool operator<(SystemState const& right) const;
+  int compare(const SystemState& rhs) const;
+  bool operator==(const SystemState& rhs) const;
+  bool operator<(const SystemState& right) const;
 
   // TODO: This should probably clean up the machines and message_queue.
   // This will take some work to do properly, so for now we leak memory.
