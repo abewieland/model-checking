@@ -112,6 +112,7 @@ std::vector<SystemState> Model::run() {
 
 }
 
+
 // A simple example
 
 class TestMessage;
@@ -196,6 +197,7 @@ std::vector<Message*> TestSenderMachine::on_startup()
 
       return results;
     }
+
 
 int main(void) {
   std::vector<Machine*> ms;
