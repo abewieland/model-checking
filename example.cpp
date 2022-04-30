@@ -77,7 +77,7 @@ class TestMessage : public Message {
 std::vector<Message*> TestSenderMachine::on_startup()
     {
       // Machine id 2 is going to be our receiver
-      TestMessage *t = new TestMessage(this->id, 2);
+      TestMessage *t = new TestMessage(this->id, 0);
 
       std::vector<Message*> results;
       results.push_back(t);
@@ -87,11 +87,15 @@ std::vector<Message*> TestSenderMachine::on_startup()
 
 
 int main(void) {
+
   // Our machines are two senders and a receiver.
+
   std::vector<Machine*> ms;
-  ms.push_back(new TestSenderMachine(0));
-  ms.push_back(new TestSenderMachine(1));
-  ms.push_back(new TestReceiverMachine(2));
+  ms.push_back(new TestReceiverMachine(0));
+  for(int i = 1; i <= 10; i++) {
+      ms.push_back(new TestSenderMachine(i));
+  }
+
 
   // Package up into a model with no invariants.
   SystemState initial_state(ms);
@@ -103,11 +107,11 @@ int main(void) {
 
   std::cout << "Simulation exited with " << results.size() << " terminating states" << std::endl;
   // Log some stuff about each terminating state.
-  for (auto i : results) {
-      std::cout << "Final state:" << std::endl;
+  // for (auto i : results) {
+  //     std::cout << "Final state:" << std::endl;
 
-      auto log = dynamic_cast<TestReceiverMachine*>(i.machines[2])->received_log;
-      std::cout << "Log entries: " << log[0] << log[1] << std::endl;
-  }
+  //     auto log = dynamic_cast<TestReceiverMachine*>(i.machines[0])->received_log;
+  //     std::cout << "Log entries: " << log[0] << log[1] << std::endl;
+  // }
   return 0;
 }

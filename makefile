@@ -1,4 +1,4 @@
-CXXFLAGS := -Wall -std=c++11 $(CXXFLAGS)
+CXXFLAGS := -Wall -std=c++20 $(CXXFLAGS)
 PROGS = example
 OBJDIR ?= build
 BUILDSTAMP = $(OBJDIR)/stamp
