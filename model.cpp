@@ -27,10 +27,15 @@ std::vector<SystemState> SystemState::get_neighbors() {
     std::cout << "found " << results.size() << "neighbors" << std::endl;
 
     next.message_queue.erase(next.message_queue.begin() + i);
-    Machine dst_machine = *next.machines[m.dst];
-    auto new_messages = dst_machine.handle_message(m);
+
+    next.machines[m->dst] = next.machines[m->dst]->clone();
+
+    Machine& dst_machine = *next.machines[m->dst];
+
+    auto new_messages = dst_machine.handle_message(*m);
     next.message_queue.insert(next.message_queue.end(), new_messages.begin(), new_messages.end());
     results.push_back(next);
+
   }
     std::cout << "found " << results.size() << "neighbors" << std::endl;
 
@@ -57,8 +62,10 @@ Model::Model(SystemState initial_state, std::vector<Invariant> invariants) {
 
     initial_state.message_queue.insert(initial_state.message_queue.end(), new_messages.begin(), new_messages.end());
   }
+  std::cout << "here" << std::endl;
 
   this->pending.push(initial_state);
+
 }
 
 bool Invariant::check(SystemState state) {
@@ -85,7 +92,7 @@ std::vector<SystemState> Model::run() {
     pending.pop();
     visited.insert(current);
 
-    bool passed_invariants = check_invariants(current);
+    // bool passed_invariants = check_invariants(current);
 
     auto neighbors = current.get_neighbors();
     if(neighbors.size() == 0) {
@@ -120,15 +127,20 @@ public:
     }
 
     // Ignores all messagnes
-    std::vector<Message> handle_message(Message msg)  override {    } ;
+    // std::vector<Message> handle_message(Message msg)  override {    } ;
 
     // Sends right away to machine 2
-    std::vector<Message> on_startup() override;
+    std::vector<Message*> on_startup() override;
 
 
     bool operator==(const TestSenderMachine& rhs) const  {
       return this->id == rhs.id;
     }
+
+    TestSenderMachine* clone()  const override {
+      return new TestSenderMachine(this->id);
+    }   // Covariant Return Types; see below
+
 
 };
 
@@ -138,35 +150,47 @@ public:
       this->id = id;
     }
 
+    TestReceiverMachine(int id, std::vector<int> received_log) {
+      this->id = id;
+      this->received_log = received_log;
+    }
+
     std::vector<int> received_log;
 
-    std::vector<Message> handle_message(Message msg)  override {
+    std::vector<Message*> handle_message(Message& msg)  override {
+          std::cout << "handling message" << std::endl;
       msg.operate(*this);
+      return std::vector<Message*>();
     };
 
 
     // Does nothing on startup
-    std::vector<Message> on_startup()  override { }
+    std::vector<Message*> on_startup()  override { return std::vector<Message*>(); }
 
     bool operator==(const TestSenderMachine& rhs) const {
       return this->id == rhs.id;
+    }
+
+    TestReceiverMachine* clone()  const override {
+      std::cout << "overrided clone" << std::endl;
+      return new TestReceiverMachine(this->id, this->received_log);
     }
 };
 
 class TestMessage : public Message {
     using Message::Message;
 
-    void operate(Machine& m) {
+    void operate(Machine& m) override {
+      std::cout << "log add" << std::endl;
       dynamic_cast<TestReceiverMachine&>(m).received_log.push_back(this->src);
-
     }
 
 };
 
-std::vector<Message> TestSenderMachine::on_startup()
+std::vector<Message*> TestSenderMachine::on_startup()
     {
-      TestMessage t(this->id, 2);
-      std::vector<Message> results;
+      TestMessage *t = new TestMessage(this->id, 2);
+      std::vector<Message*> results;
       results.push_back(t);
       std::cout << "send startup" << std::endl;
 
@@ -187,6 +211,10 @@ int main(void) {
 
   std::cout << "finished" << std::endl;
   std::cout << "Inited a machine." << std::endl;
+  for (auto i : results) {
+      auto log = dynamic_cast<TestReceiverMachine*>(i.machines[2])->received_log;
+      std::cout << "r1 log: " << log[0] << log[1] << std::endl;
 
+  }
 
 }

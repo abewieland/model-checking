@@ -29,12 +29,13 @@ class Machine {
 
     int get_id() { return id; };
 
-    virtual std::vector<Message> handle_message(Message msg) { return std::vector<Message>(); };
+    virtual std::vector<Message*> handle_message(Message& msg) { return std::vector<Message*>(); };
 
+    virtual Machine* clone()  const  { return new Machine(); };   // Uses the copy constructor
 
-    virtual std::vector<Message> on_startup() {
+    virtual std::vector<Message*> on_startup() {
       std::cout << "oh no calling base" << std::endl;
-      return std::vector<Message>();
+      return std::vector<Message*>();
     }
 
     virtual bool operator==(const Machine& rhs) const;
@@ -54,7 +55,7 @@ class Invariant {
 class SystemState {
   public:
 
-  std::vector<Message> message_queue;
+  std::vector<Message*> message_queue;
 
   std::vector<Machine*> machines;
 
