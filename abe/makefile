@@ -1,5 +1,5 @@
 CXXFLAGS := -Wall -std=c++11 $(CXXFLAGS)
-PROGS = model
+PROGS = msg
 OBJDIR ?= build
 BUILDSTAMP = $(OBJDIR)/stamp
 
