@@ -1,5 +1,5 @@
 CXXFLAGS := -Wall -std=c++11 $(CXXFLAGS)
-PROGS = model
+PROGS = example
 OBJDIR ?= build
 BUILDSTAMP = $(OBJDIR)/stamp
 
@@ -9,6 +9,8 @@ all: $(PROGS)
 %.o: %.cc
 %: %.o
 %: %.cc
+%: %.cpp
+
 
 # Debugging
 G ?= 0
@@ -32,10 +34,8 @@ endif
 %: $(OBJDIR)/%.o $(OBJDIR)/model.o
 	g++ $(CXXFLAGS) $(LDLIBS) $^ -o $@
 
-%: $(OBJDIR)/%.o $(OBJDIR)/example.o
-	g++ $(CXXFLAGS) $(LDLIBS) $^ -o $@
 
-$(OBJDIR)/%.o: %.cc $(BUILDSTAMP)
+$(OBJDIR)/%.o: %.cpp $(BUILDSTAMP)
 	g++ $(CXXFLAGS) $(DEPSOPTS) -c $< -o $@
 
 clean:
