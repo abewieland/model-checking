@@ -40,9 +40,11 @@ std::vector<SystemState> SystemState::get_neighbors() {
 
 int SystemState::compare(const SystemState& rhs) const {
   // A necessary evil; SystemStates need to be comparable.
+  if (long r = message_queue.size() - rhs.message_queue.size()) return r;
   for (size_t i = 0; i < message_queue.size(); ++i) {
     if (int r = message_queue[i]->compare(rhs.message_queue[i])) return r;
   }
+  if (long r = machines.size() - rhs.machines.size()) return r;
   for (size_t i = 0; i < machines.size(); ++i) {
     if (int r = machines[i]->compare(rhs.machines[i])) return r;
   }
@@ -125,7 +127,7 @@ std::vector<SystemState> Model::run() {
     // operator== operations for all machines and messages.
     for (auto neighbor : neighbors)
     {
-        if (visited.find(neighbor) != visited.end())
+        if (visited.find(neighbor) == visited.end())
         {
             pending.push(neighbor);
         }
