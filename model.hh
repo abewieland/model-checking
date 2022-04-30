@@ -37,8 +37,12 @@ class Message {
     // Must be defined for any message, so that the system states can be comapred.
     // Note that this should be logical comparison, so that two states that represent
     // the same logical state of the system compare equal.
-    virtual bool operator==(const Message& rhs) const {
-       return (this->src == rhs.src) && (this->dst == rhs.dst);
+    bool operator<(const Message& rhs) const {
+        return this < &rhs;
+    }
+
+    bool operator==(const Message& rhs) const {
+       return this == &rhs;
     }
 };
 
@@ -77,7 +81,7 @@ class Machine {
     // Note that this should be logical comparison, so that two states that represent
     // the same logical state of the system compare equal.
     // virtual bool operator==(const Machine& rhs) const;
-    bool operator<(Machine const& right) {return this->id < right.id; };
+    virtual bool operator<(Machine const& right) {return this->id < right.id; };
 
     virtual bool operator==(const Machine& rhs) const {
      return this->id == rhs.id;

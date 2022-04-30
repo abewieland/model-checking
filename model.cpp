@@ -43,9 +43,9 @@ bool SystemState::operator==(SystemState const& rhs) const {
   return (machines == rhs.machines) && (message_queue == rhs.message_queue);
 }
 
-bool SystemState::operator<(SystemState const& right) const {
-  // TODO: create an ordering so we can have sets. This is urgent.
-  return false;
+bool SystemState::operator<(SystemState const& rhs) const {
+  return (message_queue == rhs.message_queue) ? (machines < rhs.machines)
+    : message_queue < rhs.message_queue;
 }
 
 // To construct a Model from an initial state and some invariants, run all of the
