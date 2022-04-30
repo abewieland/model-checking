@@ -22,7 +22,11 @@ class Message {
     int src;
     int dst;
 
-    Message(int src, int dst);
+    Message(int src, int dst) {
+      this->src = src;
+      this->dst = dst;
+    }
+
     virtual ~Message() {};
 
 
@@ -33,7 +37,9 @@ class Message {
     // Must be defined for any message, so that the system states can be comapred.
     // Note that this should be logical comparison, so that two states that represent
     // the same logical state of the system compare equal.
-    virtual bool operator==(const Message& rhs) const;
+    virtual bool operator==(const Message& rhs) const {
+       return (this->src == rhs.src) && (this->dst == rhs.dst);
+    }
 };
 
 class Machine {
@@ -70,26 +76,16 @@ class Machine {
     // Must be defined for any machine, so that the system states can be comapred.
     // Note that this should be logical comparison, so that two states that represent
     // the same logical state of the system compare equal.
-    virtual bool operator==(const Machine& rhs) const;
+    // virtual bool operator==(const Machine& rhs) const;
     bool operator<(Machine const& right) {return this->id < right.id; };
 
+    virtual bool operator==(const Machine& rhs) const {
+     return this->id == rhs.id;
+   };
+
 };
 
-class Invariant {
-  // An invariant object is a wrapper around a predicate over the state of a system.
-  // Create subclasses to create non-trivial invariants.
 
-  // For convenience, we might want to name invariants.
-  std::string name;
-  public:
-    Invariant(std::string name) {
-      this->name = name;
-    }
-
-    // An invariant is a predicate over the state of a system, returning
-    // true iff the invariant passes the test, and false otherwise.
-    bool check(SystemState state);
-};
 
 class SystemState final {
 public:
@@ -132,15 +128,46 @@ public:
 
 };
 
+class Invariant {
+  // An invariant object is a wrapper around a predicate over the state of a system.
+  // Create subclasses to create non-trivial invariants.
+
+  // For convenience, we might want to name invariants.
+  public:
+    std::string name;
+
+    Invariant(std::string name) {
+      this->name = name;
+    }
+
+    // An invariant is a predicate over the state of a system, returning
+    // true iff the invariant passes the test, and false otherwise.
+    // The trivial invariant always returns true.
+    virtual bool check(SystemState state) {return true; };
+
+    virtual ~Invariant() {};
+};
+
 class Model {
+
+  // The primary model class. A model is a set of states on which we're doing a
+  // BFS, essentially. Additionally, it has a set of invariants---predicates which
+  // are evaluated on every node.
+
   public:
 
+  // Pending, visited are the usual BFS roles.
   std::queue<SystemState> pending;
   std::set<SystemState> visited;
+
   std::vector<Invariant> invariants;
 
   Model(SystemState initial_state, std::vector<Invariant> invariants);
+
+  // Ensures that s validates against all members of `invariants`.
   bool check_invariants(SystemState s);
+
+  // The primary model checking routine.
   std::vector<SystemState> run();
 
 };
