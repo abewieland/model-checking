@@ -2,6 +2,7 @@
 #include <vector>
 #include <queue>
 #include <set>
+#include <string>
 
 class Machine;
 class Invariant;
@@ -10,13 +11,13 @@ class Model;
 
 class Message {
   private:
-    Machine& src;
-    Machine& dst;
+    int src;
+    int dst;
 
   public:
-    Message(Machine& src, Machine& dst);
-    virtual void operate(Machine& m);
-    virtual ~Message();
+    Message(int src, int dst);
+    virtual void operate(Machine& m) {};
+    virtual ~Message() {};
     virtual bool operator==(const Message& rhs) const;
 };
 
@@ -33,23 +34,31 @@ class Machine {
     virtual std::vector<Message> on_startup() { return std::vector<Message>(); }
 
     virtual bool operator==(const Machine& rhs) const;
+    bool operator<(Machine const& right) {return this->id < right.id; };
 
 };
 
 class Invariant {
+  std::string name;
   public:
+    Invariant(std::string name) {
+      this->name = name;
+    }
     bool check(SystemState state);
 };
 
 class SystemState {
-  std::vector<Machine> machines;
-  std::unordered_map<int, std::vector<Message> > message_queue;
-
   public:
 
-    SystemState ();
+  std::vector<Message> message_queue;
 
-    ~SystemState ();
+  std::vector<Machine> machines;
+
+    SystemState (std::vector<Machine> machines) {
+      this->machines = machines;
+    }
+
+    ~SystemState () {};
 
     std::vector<SystemState> get_neighbors();
 
@@ -67,65 +76,9 @@ class Model {
 
   Model(SystemState initial_state, std::vector<Invariant> invariants);
   bool check_invariants(SystemState s);
-  void run();
+  std::vector<SystemState> run();
 
 };
 
-Message::Message(Machine& src, Machine& dst) : src(src), dst(dst)  {  }
 
-bool Message::operator==(const Message& rhs) const {
-  return (this->src == rhs.src) && (this->dst == rhs.dst);
-}
-
-bool Machine::operator==(const Machine& rhs) const {
-   return this->id == rhs.id;
-};
-
-
-std::vector<SystemState> SystemState::get_neighbors() {
-  // TODO
-}
-
-bool SystemState::operator==(SystemState const& rhs) const {
-  return (machines == rhs.machines) && (message_queue == rhs.message_queue);
-}
-
-bool SystemState::operator<(SystemState const& right) const {
-  // Todo: actual code here
-  return false;
-}
-
-Model::Model(SystemState initial_state, std::vector<Invariant> invariants) {
-  this->pending.push(initial_state);
-  this->invariants = invariants;
-}
-
-bool Model::check_invariants(SystemState s) {
-  for(auto i : this->invariants) {
-    if(!i.check(s)) {
-      return false;
-    }
-
-  }
-  return true;
-
-}
-
-void Model::run() {
-  while(!this->pending.empty()) {
-    auto current = pending.front();
-    pending.pop();
-    visited.insert(current);
-
-    check_invariants(current);
-
-    for (auto neighbor : current.get_neighbors())
-    {
-        if (visited.find(neighbor) != visited.end())
-        {
-            pending.push(neighbor);
-        }
-    }
-  }
-}
 
