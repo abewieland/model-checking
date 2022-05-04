@@ -1,117 +1,63 @@
-#include "model.hh"
+#include "model.hpp"
 
+// A simple example of many sender machines sending messages to a single
+// receiver. Due to network asynchrony, the receiver may receive them in any
+// order.
 
-// A simple example of two sender machines sending messages to a single receiver.
-// Due to network asynchrony, the receiver may receive them in any order.
-
-class TestMessage;
-class TestSenderMachine;
-class TestReceiverMachine;
-
-class TestSenderMachine : public Machine {
-public:
-
-    TestSenderMachine(int id) {
-      this->id = id;
-    }
-
-    // A sender sends a machine on startup immediately. See implementation below.
-    std::vector<Message*> on_startup() override;
-
-    bool operator==(const TestSenderMachine& rhs) const  {
-      return this->id == rhs.id;
-    }
-
-    TestSenderMachine* clone()  const override {
-      return new TestSenderMachine(this->id);
-    }
-
-};
-
-class TestReceiverMachine : public Machine {
-public:
-    // A receiver has an ordered log of the ids of machines from whom it has received
-    // messages.
-    std::vector<int> received_log;
-
-    TestReceiverMachine(int id) {
-      this->id = id;
-    }
-
-    TestReceiverMachine(int id, std::vector<int> received_log) {
-      this->id = id;
-      this->received_log = received_log;
-    }
-
-
-    std::vector<Message*> handle_message(Message& msg)  override {
-      msg.operate(*this);
-      // A receiver lets a message operate on it. These will be TestMessage objects
-      // which update the log.
-      return std::vector<Message*>();
-    };
-
-    // A receiver does nothing on startup.
-    std::vector<Message*> on_startup()  override { return std::vector<Message*>(); }
-
-    bool operator==(const TestSenderMachine& rhs) const {
-      return this->id == rhs.id;
-    }
-
-    TestReceiverMachine* clone()  const override {
-      return new TestReceiverMachine(this->id, this->received_log);
-    }
-};
-
-class TestMessage : public Message {
+struct Msg : Message {
     using Message::Message;
-
-    // A test message puts its src id in its recipients log. That's it.
-    void operate(Machine& m) override {
-      dynamic_cast<TestReceiverMachine&>(m).received_log.push_back(this->src);
-    }
-
 };
 
+struct Sender : Machine {
+    id_t dst;
 
-std::vector<Message*> TestSenderMachine::on_startup()
-    {
-      // Machine id 2 is going to be our receiver
-      TestMessage *t = new TestMessage(this->id, 0);
+    Sender(id_t id, id_t dst) : Machine(id), dst(dst) {}
 
-      std::vector<Message*> results;
-      results.push_back(t);
-      std::cout << "Sender Machine " << this->id << " sent its message." << std::endl;
-      return results;
+    Sender* clone() const override {
+      return new Sender(id, dst);
     }
 
+    // The sender sends a message on startup, but does no message handling
+    std::vector<Message*> on_startup() {
+        Msg* m = new Msg(id, dst);
 
-int main(void) {
+        std::vector<Message*> ret;
+        ret.push_back(m);
+        std::cout << "Sender " << id << " sent its message." << std::endl;
+        return ret;
+    }
+};
 
-  // Our machines are two senders and a receiver.
+struct Receiver : Machine {
+    // A receiver has an ordered log of the ids of machines from whom it has
+    // received messages.
+    std::vector<id_t> log;
 
-  std::vector<Machine*> ms;
-  ms.push_back(new TestReceiverMachine(0));
-  for(int i = 1; i <= 10; i++) {
-      ms.push_back(new TestSenderMachine(i));
-  }
+    using Machine::Machine;
 
+    Receiver* clone() const override {
+        Receiver* r = new Receiver(id);
+        r->log = log;
+        return r;
+    }
 
-  // Package up into a model with no invariants.
-  SystemState initial_state(ms);
-  Model model(initial_state, std::vector<Invariant>());
+    // The receiver receives messages, but does nothing on startup
+    std::vector<Message*> handle_message(Message* m) override {
+        log.push_back(dynamic_cast<Msg*>(m)->src);
+        return std::vector<Message*>();
+    }
+};
 
+int main() {
+    std::vector<Machine*> m;
+    m.push_back(new Receiver(0));
+    for (int i = 1; i <= 9; i++) {
+        m.push_back(new Sender(i, 0));
+    }
+    Model model{m, std::vector<Invariant>{}};
 
-  auto results = model.run();
-
-
-  std::cout << "Simulation exited with " << results.size() << " terminating states" << std::endl;
-  // Log some stuff about each terminating state.
-  // for (auto i : results) {
-  //     std::cout << "Final state:" << std::endl;
-
-  //     auto log = dynamic_cast<TestReceiverMachine*>(i.machines[0])->received_log;
-  //     std::cout << "Log entries: " << log[0] << log[1] << std::endl;
-  // }
-  return 0;
+    std::vector<SystemState> res = model.run();
+    std::cout << "Simulation exited with " << res.size()
+        << " terminating states" << std::endl;
+    return 0;
 }
