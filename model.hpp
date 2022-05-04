@@ -47,7 +47,7 @@ struct Machine {
     // This class is purely virtual and should never be instantiated directly.
     // Make subclasses (with additional state) for more specific machines.
 
-    // id currently determins position in machine list, so must be non-negative.
+    // id currently determines position in machine list, so must be non-negative.
     id_t id;
 
     Machine(id_t id) : id(id) {}
@@ -56,12 +56,12 @@ struct Machine {
     // Machines react to receiving messages by:
     //  (1) Updating their state accordingly
     //  (2) Returning a vector of new messages to emit in response
-    // Note that after intiialization, this is the main handler.
+    // Note that after initialization, this is the main handler.
     virtual std::vector<Message*> handle_message(Message* msg) {
         return std::vector<Message*>{};
     }
 
-    // A machine must be clonable to allow for mutation. Subclasses must
+    // A machine must be cloneable to allow for mutation. Subclasses must
     // implement this method such that `compare(clone()) == 0`.
     virtual Machine* clone() const {
         return new Machine(id);

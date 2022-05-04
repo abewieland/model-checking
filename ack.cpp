@@ -72,7 +72,7 @@ struct Receiver : Machine {
     }
 
     std::vector<Message*> handle_message(Message* m) override {
-        // Pretty simple for the receiver - send acknowledgement
+        // Pretty simple for the receiver - send acknowledgment
         std::vector<Message*> ret;
         val = dynamic_cast<Msg*>(m)->val;
         ret.push_back(new Ack(id, m->src));
