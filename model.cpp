@@ -28,9 +28,9 @@ std::vector<History> History::get_neighbors() {
 
         // Build and append the history object.
         Diff d;
-        d.removed.push_back(m);
-        d.added = new_msg;
-        History h(next);
+        d.delivered = m;
+        d.sent = new_msg;
+        History h{next};
         h.history = history;
         h.history.push_back(d);
         results.push_back(h);
@@ -52,9 +52,9 @@ int SystemState::compare(const SystemState& rhs) const {
 
 // To construct a Model from an initial state and some invariants, run all of
 // the machines' initialization tasks.
-Model::Model(SystemState initial_state, std::vector<Invariant> invariants)
-    : invariants(invariants) {
-    History h(initial_state);
+Model::Model(std::vector<Machine*> m, std::vector<Invariant> i)
+    : invariants(i) {
+    History h{SystemState{m}};
 
     // Initialize machines
     for (Machine*& m : h.curr.machines) {

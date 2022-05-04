@@ -58,7 +58,7 @@ struct Machine {
     //  (2) Returning a vector of new messages to emit in response
     // Note that after intiialization, this is the main handler.
     virtual std::vector<Message*> handle_message(Message* msg) {
-        return std::vector<Message*>();
+        return std::vector<Message*>{};
     }
 
     // A machine must be clonable to allow for mutation. Subclasses must
@@ -70,7 +70,7 @@ struct Machine {
     // On startup a machine might manipulate its own state, then return a vector
     // of messages it emits on initialization.
     virtual std::vector<Message*> on_startup() {
-        return std::vector<Message*>();
+        return std::vector<Message*>{};
     }
 
     // Compare this message to `rhs` in a classic three-way manner; should be
@@ -117,16 +117,15 @@ struct Invariant final {
     std::string name;
     std::function<bool(SystemState)> check;
 
-    Invariant(std::string name, std::function<bool(SystemState)> check)
-        : name(name), check(check) {}
+    Invariant(std::string s, std::function<bool(SystemState)> fn)
+        : name(s), check(fn) {}
 };
 
 struct Diff final {
-    // A diff simply captures the messages added and removed to transition from
-    // one state to another; since messages are immutable and never deleted,
-    // diffs are simply vectors of pointers
-    std::vector<Message*> added;
-    std::vector<Message*> removed;
+    // A diff simply captures the messages sent and delivered; only one message
+    // is ever delivered for each diff, so no need for a vector there
+    std::vector<Message*> sent;
+    Message* delivered;
 };
 
 struct History final {
@@ -155,7 +154,9 @@ struct Model final {
 
     std::vector<Invariant> invariants;
 
-    Model(SystemState initial_state, std::vector<Invariant> invariants);
+    // Initialize a model with an initial state (a vector of machines) and some
+    // invariants
+    Model(std::vector<Machine*> m, std::vector<Invariant> i);
 
     // Ensures that `s` validates against all members of `invariants`.
     bool check_invariants(SystemState s) const {

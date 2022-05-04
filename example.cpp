@@ -54,8 +54,7 @@ int main() {
     for (int i = 1; i <= 9; i++) {
         m.push_back(new Sender(i, 0));
     }
-    SystemState initial(m);
-    Model model(initial, std::vector<Invariant>());
+    Model model{m, std::vector<Invariant>{}};
 
     std::vector<SystemState> res = model.run();
     std::cout << "Simulation exited with " << res.size()

@@ -85,8 +85,7 @@ int main() {
     std::vector<Machine*> m;
     m.push_back(new Sender(0, 1, rand()));
     m.push_back(new Receiver(1));
-    SystemState initial(m);
-    Model model(initial, std::vector<Invariant>());
+    Model model{m, std::vector<Invariant>{}};
 
     std::vector<SystemState> res = model.run();
     std::cout << "Simulation exited with " << res.size()
