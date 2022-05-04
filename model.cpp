@@ -1,138 +1,99 @@
 #include "model.hpp"
 
+std::vector<History> History::get_neighbors() {
+    std::vector<History> results;
+    for (size_t i = 0; i < curr.messages.size(); ++i) {
+        // Each message may be delivered to make a new state
+        Message* m = curr.messages[i];
 
-// SystemState Implementation
+        // The SystemState copy constructor copies the machine and message
+        // vectors of pointers, but not their contents.
+        SystemState next = SystemState(curr);
 
+        // Since accepting a message may mutate state, clone the machine first;
+        // if it didn't change, we'll delete it later
+        next.messages.erase(next.messages.begin() + i);
+        Machine* target = next.machines[m->dst]->clone();
 
-std::vector<SystemState> SystemState::get_neighbors() {
-  // Generate all the states neighboring this.
-  // Semantics note: Even though data can be shared between the new and old states,
-  // this MUST be invisible. That is, a new state needs to clone a machine if its going to change it.
+        // This fresh machine object will handle the message, possibly emitting
+        // new messages. These belong in the new message queue.
+        std::vector<Message*> new_msg = target->handle_message(m);
+        if (target->compare(next.machines[m->dst])) {
+            next.machines[m->dst] = target;
+        } else {
+            delete target;
+        }
+        next.messages.insert(next.messages.end(),
+                             new_msg.begin(), new_msg.end());
 
-
-  std::vector<SystemState> results;
-
-  for (size_t i = 0; i < this->message_queue.size(); i++) {
-    // Consider each message m
-    auto m = this->message_queue[i];
-
-    // The SystemState copy constructor copies the machine and message_queue
-    // vectors of pointers, but not their contents.
-    SystemState next = SystemState(*this);
-
-    // We are going to act on m's recipient, so we need to clone it in the
-    // new SystemState.
-    next.message_queue.erase(next.message_queue.begin() + i);
-    next.machines[m->dst] = next.machines[m->dst]->clone();
-
-    // With this fresh machine object, we can handle the message, possibly receiving
-    // some new messages to emit. Put those in the message queue of the new system state.
-    Machine& dst_machine = *next.machines[m->dst];
-    auto new_messages = dst_machine.handle_message(*m);
-    next.message_queue.insert(next.message_queue.end(), new_messages.begin(), new_messages.end());
-
-    // Done preparing this state.
-    results.push_back(next);
-  }
-
-  return results;
+        // Build and append the history object.
+        Diff d;
+        d.removed.push_back(m);
+        d.added = new_msg;
+        History h(next);
+        h.history = history;
+        h.history.push_back(d);
+        results.push_back(h);
+    }
+    return results;
 }
 
 int SystemState::compare(const SystemState& rhs) const {
-  // A necessary evil; SystemStates need to be comparable.
-  if (long r = message_queue.size() - rhs.message_queue.size()) return r;
-  for (size_t i = 0; i < message_queue.size(); ++i) {
-    if (int r = message_queue[i]->compare(rhs.message_queue[i])) return r;
-  }
-  if (long r = machines.size() - rhs.machines.size()) return r;
-  for (size_t i = 0; i < machines.size(); ++i) {
-    if (int r = machines[i]->compare(rhs.machines[i])) return r;
-  }
-  return 0;
-}
-
-bool SystemState::operator==(const SystemState& rhs) const { return !compare(rhs); }
-
-bool SystemState::operator<(const SystemState& rhs) const {
-  return compare(rhs) < 0;
-}
-
-// To construct a Model from an initial state and some invariants, run all of the
-// Machine's initialization tasks.
-Model::Model(SystemState initial_state, std::vector<Invariant> invariants) {
-
-  this->invariants = invariants;
-
-  // Initial action for each machine.
-  for(auto &m : initial_state.machines) {
-    auto new_messages = m->on_startup();
-    initial_state.message_queue.insert(initial_state.message_queue.end(), new_messages.begin(), new_messages.end());
-  }
-
-  // Visit this state first.
-  this->pending.push(initial_state);
-
-
-  std::cout << "Initialized a new model with "
-            << initial_state.machines.size()
-            << " machines and "
-            << invariants.size()
-            << " invariants. "
-            << std::endl;
-}
-
-bool Model::check_invariants(SystemState s) {
-  // Check every invariant of the model on s.
-  // This can be made more expressive later.
-  for(auto i : this->invariants) {
-    if(!i.check(s)) {
-      std::cout << "INVARIANT VIOLATED: "
-                << i.name
-                << std::endl;
-      return false;
+    if (long r = messages.size() - rhs.messages.size()) return r;
+    for (size_t i = 0; i < messages.size(); ++i) {
+        if (int r = messages[i]->compare(rhs.messages[i])) return r;
     }
-  }
-  return true;
+    if (long r = machines.size() - rhs.machines.size()) return r;
+    for (size_t i = 0; i < machines.size(); ++i) {
+        if (int r = machines[i]->compare(rhs.machines[i])) return r;
+    }
+    return 0;
+}
+
+// To construct a Model from an initial state and some invariants, run all of
+// the machines' initialization tasks.
+Model::Model(SystemState initial_state, std::vector<Invariant> invariants)
+    : invariants(invariants) {
+    History h(initial_state);
+
+    // Initialize machines
+    for (Machine*& m : h.curr.machines) {
+        std::vector<Message*> new_msg = m->on_startup();
+        h.curr.messages.insert(h.curr.messages.end(),
+                               new_msg.begin(), new_msg.end());
+    }
+
+    // Visit the initial state first.
+    pending.push(h);
+
+    std::cout << "Initialized a new model with " << h.curr.machines.size()
+              << " machines and " << invariants.size() << " invariants."
+              << std::endl;
 }
 
 std::vector<SystemState> Model::run() {
-  // Run the model to completion using BFS. Returns a list of states in which
-  // the model can terminate.
-  std::vector<SystemState> terminating;
+    std::vector<SystemState> terminating;
 
-  while(!this->pending.empty()) {
-    // Extract the next state
-    auto current = pending.front();
-    pending.pop();
+    while (!this->pending.empty()) {
+        History h = pending.front();
+        pending.pop();
 
-    visited.insert(current);
+        // Note that we only care about the states we've visited, not how we got
+        // there; since this is a BFS, the history should always be the minimum
+        // possible
+        visited.insert(h.curr);
 
-    bool passed_invariants = check_invariants(current);
+        if (!check_invariants(h.curr)) {
+            std::cerr << "Model error! Did not pass invariants." << std::endl;
+        }
 
-    if (not passed_invariants) {
-      std::cout << "Model error! Did not pass invariants." << std::endl;
-
-    }
-
-    // To add to the frontier
-    auto neighbors = current.get_neighbors();
-
-    // A state with no neighbors is a terminating state of the system. We might be
-    // interested in these. For now, we just return a list of them.
-    if(neighbors.size() == 0) {
-      terminating.push_back(current);
-    }
-
-    // Add all non-visisted neighbors to the queue. Note that this relies on proper
-    // operator== operations for all machines and messages.
-    for (auto neighbor : neighbors)
-    {
-        if (visited.find(neighbor) == visited.end())
-        {
-            pending.push(neighbor);
+        std::vector<History> neighbors = h.get_neighbors();
+        if (!neighbors.size()) terminating.push_back(h.curr);
+        for (History& neighbor : neighbors) {
+            if (visited.find(neighbor.curr) == visited.end()) {
+                pending.push(neighbor);
+            }
         }
     }
-
-  }
-  return terminating;
+    return terminating;
 }

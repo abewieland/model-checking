@@ -1,173 +1,174 @@
-#include <unordered_map>
 #include <vector>
 #include <queue>
 #include <set>
 #include <string>
+#include <functional>
 #include <iostream>
 
 class Machine;
-class Invariant;
-class SystemState;
-class Model;
 
+// Machine identifiers
+typedef unsigned id_t;
 
-class Message {
-  // A Message is the basic unit of communication in the model checker
+struct Message {
+    // A Message is the basic unit of communication in the model checker; they
+    // are currently immutable and always maintained in memory.
 
-  // This class is pure virtual and should never be instantiated directly.
-  // Make subclasses (perhaps with additional state) for any type of message
-  // you want to send.
+    // This class is purely virtual and should never be instantiated directly.
+    // Make subclasses (perhaps with additional state) for more specific
+    // messages.
 
-  public:
-    int src;
-    int dst;
+    id_t src;
+    id_t dst;
 
-    Message(int src, int dst) {
-      this->src = src;
-      this->dst = dst;
-    }
-
-    virtual ~Message() {};
-
+    Message(id_t src, id_t dst) : src(src), dst(dst) {}
+    virtual ~Message() {}
 
     // A message is "delivered" to m by mutating its state.
     // This is analogous to RPC
-    virtual void operate(Machine& m) {};
+    // XXX is this still a useful abstraction?
+    virtual void operate(Machine& m) {}
 
-    // Must be defined for any message, so that the system states can be comapred.
-    // Note that this should be logical comparison, so that two states that represent
-    // the same logical state of the system compare equal.
-    int compare(Message* rhs) const {
+    // Compare this message to `rhs` in a classic three-way manner; should be
+    // overridden by subclasses if they add more members.
+    virtual int compare(Message* rhs) const {
+        // First compare type, then source and destination
+        if (typeid(*this) != typeid(*rhs))
+            return typeid(*this).before(typeid(*rhs)) ? -1 : 1;
         if (int r = src - rhs->src) return r;
         return dst - rhs->dst;
     }
 };
 
-class Machine {
-  public:
+struct Machine {
     // This is the base class for state machines in the system. Subclasses
     // will likely add mutable state.
 
-    // This class is pure virtual and should never be instantiated directly.
-    // Make subclasses (perhaps with additional state) for any type of message
-    // you want to send.
+    // This class is purely virtual and should never be instantiated directly.
+    // Make subclasses (with additional state) for more specific machines.
 
-    // UID determins position in Machine list
-    int id;
+    // id currently determins position in machine list, so must be non-negative.
+    id_t id;
 
-    int get_id() { return id; };
+    Machine(id_t id) : id(id) {}
+    virtual ~Machine() {}
 
-    // Machines react to receiving messages. A message might handle a message by:
-    //  (1) Allowing the message to mutate its state using msg.operate()
-    //  (2) Updating its own state accordingly
-    //  (3) Returning a vector of new messages that this machine will emit in response.
+    // Machines react to receiving messages by:
+    //  (1) Updating their state accordingly
+    //  (2) Returning a vector of new messages to emit in response
     // Note that after intiialization, this is the main handler.
-    virtual std::vector<Message*> handle_message(Message& msg) { return std::vector<Message*>(); };
+    virtual std::vector<Message*> handle_message(Message* msg) {
+        return std::vector<Message*>();
+    }
 
-    // A machine must be clonable. Be sure to carefully ensure that machines subclasses are cloned
-    // properly. The two clones must compare equal by operator==.
-    virtual Machine* clone()  const  { return new Machine(); };   // Uses the copy constructor
+    // A machine must be clonable to allow for mutation. Subclasses must
+    // implement this method such that `compare(clone()) == 0`.
+    virtual Machine* clone() const {
+        return new Machine(id);
+    }
 
-    // This is the machines initial behavior. On startup a machine might manipulate its own sstate
-    // and then return a vector of messages it emits on initialization.
+    // On startup a machine might manipulate its own state, then return a vector
+    // of messages it emits on initialization.
     virtual std::vector<Message*> on_startup() {
-      return std::vector<Message*>();
+        return std::vector<Message*>();
     }
 
-    // Must be defined for any machine, so that the system states can be comapred.
-    // Note that this should be logical comparison, so that two states that represent
-    // the same logical state of the system compare equal.
-    // virtual bool operator==(const Machine& rhs) const;
+    // Compare this message to `rhs` in a classic three-way manner; should be
+    // overridden by subclasses if they add more members.
     virtual int compare(Machine* rhs) const {
-        return id - rhs->id;
+        return (int) id - rhs->id;
     }
 };
 
+struct SystemState final {
+    // Together, the messages and machines constitute the state of a system.
+    std::vector<Message*> messages;
+    std::vector<Machine*> machines;
 
+    // Initialize with a machine list.
+    SystemState (std::vector<Machine*> machines) : machines(machines) {}
 
-class SystemState final {
-public:
+    // When we explore the state graph, we deep copy the SystemState. This
+    // copies the vectors of pointers, but does not copy the underlying machines
+    // or messages. This should be fine, since messages are immutable and
+    // machines must be manually copied when acted upon, which is handled by the
+    // get_neighbors implementation.
+    SystemState (const SystemState& other) {
+        this->machines = other.machines;
+        this->messages = other.messages;
+    }
 
-  // Together, message_queue and machines constitute the state of a system.
+    // SystemStates are comparable so we can skip visited states.
+    int compare(const SystemState& rhs) const;
+    bool operator==(const SystemState& rhs) const {
+        return !compare(rhs);
+    }
+    bool operator<(const SystemState& rhs) const {
+        return compare(rhs) < 0;
+    }
 
-  // The current queue of messages "in the network"
-  std::vector<Message*> message_queue;
-  // All of the machines
-  std::vector<Machine*> machines;
-
-  //
-  SystemState (std::vector<Machine*> machines) {
-    this->machines = machines;
-  }
-
-  // Copy constructor! When we explore the state graph, we deep copy the SystemState.
-  // Note that this copies the vectors of pointers, but does not copy the underlying
-  // machines or messages. This should be fine, since messages should be immutable.
-  // Machines must be manually copied when acted upon, which is handled by the
-  // get_neighbors implementation.
-  SystemState (const SystemState& other) {
-    this->machines = other.machines;
-    this->message_queue = other.message_queue;
-  }
-
-  // Returns a vector of neighboring states. For now, a next state is reached by
-  // any machine accepting any message to it in the message queue. In the future
-  // the richness of the simulation will be improved by increasing the dynamics of
-  // what constitutes a next state.
-  std::vector<SystemState> get_neighbors();
-
-  // SystemStates are comparable so we can skip visited states.
-  int compare(const SystemState& rhs) const;
-  bool operator==(const SystemState& rhs) const;
-  bool operator<(const SystemState& right) const;
-
-  // TODO: This should probably clean up the machines and message_queue.
-  // This will take some work to do properly, so for now we leak memory.
-  ~SystemState () {};
-
+    // TODO: This should probably clean up the machines and message_queue.
+    // This will take some work to do properly, so for now we leak memory.
+    ~SystemState () {}
 };
 
-class Invariant {
-  // An invariant object is a wrapper around a predicate over the state of a system.
-  // Create subclasses to create non-trivial invariants.
-
-  // For convenience, we might want to name invariants.
-  public:
+struct Invariant final {
+    // An invariant is simply a named predicate over the state of a system.
     std::string name;
+    std::function<bool(SystemState)> check;
 
-    Invariant(std::string name) {
-      this->name = name;
+    Invariant(std::string name, std::function<bool(SystemState)> check)
+        : name(name), check(check) {}
+};
+
+struct Diff final {
+    // A diff simply captures the messages added and removed to transition from
+    // one state to another; since messages are immutable and never deleted,
+    // diffs are simply vectors of pointers
+    std::vector<Message*> added;
+    std::vector<Message*> removed;
+};
+
+struct History final {
+    // A history is just a state and an ordered list of diffs that led from the
+    // initial state to this state
+    SystemState curr;
+    std::vector<Diff> history;
+
+    // Make a history from a state (set the history later)
+    History(SystemState s) : curr(s) {}
+
+    // Returns a vector of neighboring states, with the added methods to get
+    // there. For now, a next state is reached by any machine accepting a
+    // message from the queue.
+    std::vector<History> get_neighbors();
+};
+
+struct Model final {
+    // A model is a set of states on which we're doing a BFS, essentially.
+    // It also has a set of invariants evaluated at each state, and a history
+    // to arrive at each state.
+
+    // Pending, visited are the usual BFS roles.
+    std::queue<History> pending;
+    std::set<SystemState> visited;
+
+    std::vector<Invariant> invariants;
+
+    Model(SystemState initial_state, std::vector<Invariant> invariants);
+
+    // Ensures that `s` validates against all members of `invariants`.
+    bool check_invariants(SystemState s) const {
+        for (const Invariant& i : invariants) {
+            if (!i.check(s)) {
+                std::cerr << "INVARIANT VIOLATED: " << i.name << std::endl;
+                return false;
+            }
+        }
+        return true;
     }
 
-    // An invariant is a predicate over the state of a system, returning
-    // true iff the invariant passes the test, and false otherwise.
-    // The trivial invariant always returns true.
-    virtual bool check(SystemState state) {return true; };
-
-    virtual ~Invariant() {};
+    // The primary model checking routine; returns a list of states the model
+    // may terminate in.
+    std::vector<SystemState> run();
 };
-
-class Model {
-
-  // The primary model class. A model is a set of states on which we're doing a
-  // BFS, essentially. Additionally, it has a set of invariants---predicates which
-  // are evaluated on every node.
-
-  public:
-
-  // Pending, visited are the usual BFS roles.
-  std::queue<SystemState> pending;
-  std::set<SystemState> visited;
-
-  std::vector<Invariant> invariants;
-
-  Model(SystemState initial_state, std::vector<Invariant> invariants);
-
-  // Ensures that s validates against all members of `invariants`.
-  bool check_invariants(SystemState s);
-
-  // The primary model checking routine.
-  std::vector<SystemState> run();
-
-};
-
