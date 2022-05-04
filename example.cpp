@@ -1,4 +1,4 @@
-#include "model.hh"
+#include "model.hpp"
 
 
 // A simple example of two sender machines sending messages to a single receiver.

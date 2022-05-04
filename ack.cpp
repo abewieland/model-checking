@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include <time.h>
-#include "model.hh"
+#include "model.hpp"
 
 struct Timer : Message {
     using Message::Message;
