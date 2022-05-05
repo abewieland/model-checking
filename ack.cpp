@@ -51,6 +51,9 @@ struct Sender : Machine {
     }
 
     std::vector<Message*> on_startup() override {
+        #ifdef B
+        ack = true;
+        #endif
         std::vector<Message*> ret;
         ret.push_back(new Val(id, dst, val));
         return ret;
@@ -96,12 +99,22 @@ struct Receiver : Machine {
     }
 };
 
+bool invariant(SystemState st) {
+    Sender* s = dynamic_cast<Sender*>(st.machines[0]);
+    Receiver* r = dynamic_cast<Receiver*>(st.machines[1]);
+    if (r->recv && r->val != s->val) return false;
+    if (s->ack && r->val != s->val) return false;
+    return true;
+}
+
 int main() {
     srand(time(0));
     std::vector<Machine*> m;
     m.push_back(new Sender(0, 1, rand()));
     m.push_back(new Receiver(1));
-    Model model{m, std::vector<Invariant>{}};
+    std::vector<Invariant> i;
+    i.push_back(Invariant{"Consistency", invariant});
+    Model model{m, i};
 
     std::vector<SystemState> res = model.run();
     printf("Simluation exited with %lu terminating states.\n", res.size());
