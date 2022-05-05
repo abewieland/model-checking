@@ -1,12 +1,9 @@
+#include <string.h>
 #include "model.hpp"
 
 // A simple example of many sender machines sending messages to a single
 // receiver. Due to network asynchrony, the receiver may receive them in any
 // order.
-
-struct Msg : Message {
-    using Message::Message;
-};
 
 struct Sender : Machine {
     id_t dst;
@@ -14,17 +11,19 @@ struct Sender : Machine {
     Sender(id_t id, id_t dst) : Machine(id), dst(dst) {}
 
     Sender* clone() const override {
-      return new Sender(id, dst);
+        return new Sender(id, dst);
     }
 
     // The sender sends a message on startup, but does no message handling
     std::vector<Message*> on_startup() {
-        Msg* m = new Msg(id, dst);
-
         std::vector<Message*> ret;
-        ret.push_back(m);
+        ret.push_back(new Message(id, dst, 0));
         std::cout << "Sender " << id << " sent its message." << std::endl;
         return ret;
+    }
+
+    int compare(Machine* rhs) const override {
+        return (int) id - rhs->id;
     }
 };
 
@@ -43,8 +42,15 @@ struct Receiver : Machine {
 
     // The receiver receives messages, but does nothing on startup
     std::vector<Message*> handle_message(Message* m) override {
-        log.push_back(dynamic_cast<Msg*>(m)->src);
-        return std::vector<Message*>();
+        log.push_back(m->src);
+        return std::vector<Message*>{};
+    }
+
+    int compare(Machine* rhs) const override {
+        if (int r = (int) id - rhs->id) return r;
+        Receiver* m = dynamic_cast<Receiver*>(rhs);
+        if (long r = log.size() - m->log.size()) return r;
+        return memcmp(log.data(), m->log.data(), log.size() * sizeof(int));
     }
 };
 

@@ -5,17 +5,17 @@
 // A simple example of two machines, one continuously sending a value to the
 // other until it responds
 
-struct Timer : Message {
-    using Message::Message;
-};
+#define MSG_TIMER 1
+#define MSG_ACK   2
+#define MSG_VAL   3
 
-struct Ack : Message {
-    using Message::Message;
-};
-
-struct Msg : Message {
+struct Val : Message {
     int val;
-    Msg(int src, int dst, int val) : Message(src, dst), val(val) {}
+    Val(id_t src, id_t dst, int val) : Message(src, dst, MSG_VAL), val(val) {}
+
+    int sub_compare(Message* rhs) const override {
+        return val - dynamic_cast<Val*>(rhs)->val;
+    }
 };
 
 struct Sender : Machine {
@@ -33,28 +33,35 @@ struct Sender : Machine {
     }
 
     std::vector<Message*> handle_message(Message* m) override {
-        // Because of cyclic reference issues (I can't use dynamic_cast in
-        // Message::operate unless it's a full type, nor can I do typeid here
-        // unless it's a full type), I decided to just put all the functionality
-        // here
         std::vector<Message*> ret;
-        // The type checking stuff turns out to be fairly easy to write, though
-        // I hate to think of what is occurring behind the scenes
-        if (typeid(*m) == typeid(Timer)) {
-            if (!ack) {
-                ret.push_back(new Msg(id, dst, val));
-                ret.push_back(new Timer(id, id));
-            }
-        } else if (typeid(*m) == typeid(Ack)) {
-            ack = true;
+        switch (m->type) {
+            case MSG_TIMER:
+                if (!ack) {
+                    ret.push_back(new Val(id, dst, val));
+                    ret.push_back(new Message(id, id, MSG_TIMER));
+                }
+                break;
+            case MSG_ACK:
+                ack = true;
+                break;
+            default:
+                // Maybe throw an error here later or something
+                break;
         }
         return ret;
     }
 
     std::vector<Message*> on_startup() override {
         std::vector<Message*> ret;
-        ret.push_back(new Msg(id, dst, val));
+        ret.push_back(new Val(id, dst, val));
         return ret;
+    }
+
+    int compare(Machine* rhs) const override {
+        if (int r = (int) id - rhs->id) return r;
+        Sender* m = dynamic_cast<Sender*>(rhs);
+        if (int r = val - m->val) return r;
+        return ack - m->ack;
     }
 };
 
@@ -74,9 +81,19 @@ struct Receiver : Machine {
     std::vector<Message*> handle_message(Message* m) override {
         // Pretty simple for the receiver - send acknowledgment
         std::vector<Message*> ret;
-        val = dynamic_cast<Msg*>(m)->val;
-        ret.push_back(new Ack(id, m->src));
+        if (m->type != MSG_VAL) {
+            // Again, like throw an error
+        }
+        val = dynamic_cast<Val*>(m)->val;
+        ret.push_back(new Message(id, m->src, MSG_ACK));
         return ret;
+    }
+
+    int compare(Machine* rhs) const override {
+        if (int r = (int) id - rhs->id) return r;
+        Receiver* m = dynamic_cast<Receiver*>(rhs);
+        if (int r = val - m->val) return r;
+        return recv - m->recv;
     }
 };
 

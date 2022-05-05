@@ -1,44 +1,38 @@
 #include "model.hpp"
 
-std::vector<History> History::get_neighbors() {
-    std::vector<History> results;
-    for (size_t i = 0; i < curr.messages.size(); ++i) {
+std::vector<SystemState> SystemState::get_neighbors() {
+    std::vector<SystemState> results;
+    for (size_t i = 0; i < messages.size(); ++i) {
         // Each message may be delivered to make a new state
-        Message* m = curr.messages[i];
+        Diff d;
+        d.delivered = messages[i];
 
         // The SystemState copy constructor copies the machine and message
         // vectors of pointers, but not their contents.
-        SystemState next = SystemState(curr);
+        SystemState next = SystemState(*this);
 
         // Since accepting a message may mutate state, clone the machine first;
         // if it didn't change, we'll delete it later
         next.messages.erase(next.messages.begin() + i);
-        Machine* target = next.machines[m->dst]->clone();
+        Machine* target = next.machines[d.delivered->dst]->clone();
 
         // This fresh machine object will handle the message, possibly emitting
         // new messages. These belong in the new message queue.
-        std::vector<Message*> new_msg = target->handle_message(m);
-        if (target->compare(next.machines[m->dst])) {
-            next.machines[m->dst] = target;
+        d.sent = target->handle_message(d.delivered);
+        if (target->compare(next.machines[d.delivered->dst])) {
+            next.machines[d.delivered->dst] = target;
         } else {
             delete target;
         }
-        next.messages.insert(next.messages.end(),
-                             new_msg.begin(), new_msg.end());
-
-        // Build and append the history object.
-        Diff d;
-        d.delivered = m;
-        d.sent = new_msg;
-        History h{next};
-        h.history = history;
-        h.history.push_back(d);
-        results.push_back(h);
+        next.messages.insert(next.messages.end(), d.sent.begin(), d.sent.end());
+        next.history.push_back(d);
+        results.push_back(next);
     }
     return results;
 }
 
 int SystemState::compare(const SystemState& rhs) const {
+    // As noted in model.hpp, ignore history
     if (long r = messages.size() - rhs.messages.size()) return r;
     for (size_t i = 0; i < messages.size(); ++i) {
         if (int r = messages[i]->compare(rhs.messages[i])) return r;
@@ -54,19 +48,18 @@ int SystemState::compare(const SystemState& rhs) const {
 // the machines' initialization tasks.
 Model::Model(std::vector<Machine*> m, std::vector<Invariant> i)
     : invariants(i) {
-    History h{SystemState{m}};
+    SystemState s{m};
 
     // Initialize machines
-    for (Machine*& m : h.curr.machines) {
+    for (Machine*& m : s.machines) {
         std::vector<Message*> new_msg = m->on_startup();
-        h.curr.messages.insert(h.curr.messages.end(),
-                               new_msg.begin(), new_msg.end());
+        s.messages.insert(s.messages.end(), new_msg.begin(), new_msg.end());
     }
 
     // Visit the initial state first.
-    pending.push(h);
+    pending.push(s);
 
-    std::cout << "Initialized a new model with " << h.curr.machines.size()
+    std::cout << "Initialized a new model with " << s.machines.size()
               << " machines and " << invariants.size() << " invariants."
               << std::endl;
 }
@@ -75,22 +68,22 @@ std::vector<SystemState> Model::run() {
     std::vector<SystemState> terminating;
 
     while (!this->pending.empty()) {
-        History h = pending.front();
+        SystemState s = pending.front();
         pending.pop();
 
         // Note that we only care about the states we've visited, not how we got
         // there; since this is a BFS, the history should always be the minimum
         // possible
-        visited.insert(h.curr);
+        visited.insert(s);
 
-        if (!check_invariants(h.curr)) {
+        if (!check_invariants(s)) {
             std::cerr << "Model error! Did not pass invariants." << std::endl;
         }
 
-        std::vector<History> neighbors = h.get_neighbors();
-        if (!neighbors.size()) terminating.push_back(h.curr);
-        for (History& neighbor : neighbors) {
-            if (visited.find(neighbor.curr) == visited.end()) {
+        std::vector<SystemState> neighbors = s.get_neighbors();
+        if (!neighbors.size()) terminating.push_back(s);
+        for (SystemState& neighbor : neighbors) {
+            if (visited.find(neighbor) == visited.end()) {
                 pending.push(neighbor);
             }
         }
