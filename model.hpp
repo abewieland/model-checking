@@ -39,7 +39,6 @@ struct Message : RefCounter {
     int type;
 
     Message(id_t src, id_t dst, int type) : src(src), dst(dst), type(type) {}
-    virtual ~Message() {}
 
     // Compare this message to `rhs` in a classic three-way manner
     int compare(Message* rhs) const {
@@ -68,7 +67,6 @@ struct Machine : RefCounter {
     id_t id;
 
     Machine(id_t id) : id(id) {}
-    virtual ~Machine() {}
 
     // Machines react to receiving messages by:
     //  (1) Updating their state accordingly
