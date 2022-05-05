@@ -1,5 +1,4 @@
 #include <string.h>
-#include <stdlib.h>
 #include "model.hpp"
 
 // A simple example of many sender machines sending messages to a single

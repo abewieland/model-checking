@@ -44,6 +44,17 @@ int SystemState::compare(const SystemState& rhs) const {
     return 0;
 }
 
+void SystemState::print_history() const {
+    // We'll probably eventually want to also print the initial state, but meh
+    fprintf(stderr, "History stack trace:\n");
+    for (const Diff& d : history) {
+        // We also probably want the messages to have virtual printing functions
+        // (machines too), so that more data can be provided
+        fprintf(stderr, "Message from %u (type %d) delivered to %u\n",
+                d.delivered->src, d.delivered->type, d.delivered->type);
+    }
+}
+
 // To construct a Model from an initial state and some invariants, run all of
 // the machines' initialization tasks.
 Model::Model(std::vector<Machine*> m, std::vector<Invariant> i)
@@ -75,9 +86,16 @@ std::vector<SystemState> Model::run() {
         // possible
         visited.insert(s);
 
-        if (!check_invariants(s))
-            fprintf(stderr, "Model error! Did not pass invariants.\n");
+        // Ensure that `s` validates against all invariants
+        for (const Invariant& i : invariants) {
+            if (!i.check(s)) {
+                fprintf(stderr, "INVARIANT VIOLATED: %s\n", i.name);
+                s.print_history();
+                exit(1);
+            }
+        }
 
+        // And add its pending members, if there are any
         std::vector<SystemState> neighbors = s.get_neighbors();
         if (!neighbors.size()) terminating.push_back(s);
         for (SystemState& neighbor : neighbors) {
