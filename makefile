@@ -16,6 +16,10 @@ ifeq ($(D),1)
 CXXFLAGS += -g
 endif
 
+ifneq ($(B),)
+CXXFLAGS += -DB=1
+endif
+
 # Dependencies
 DEPSOPTS = -MMD
 DEPS = $(wildcard $(OBJDIR)/*.d)

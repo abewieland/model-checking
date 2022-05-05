@@ -4,6 +4,7 @@
 #include <string>
 #include <functional>
 #include <stdio.h>
+#include <stdlib.h>
 
 class Machine;
 
@@ -134,6 +135,9 @@ struct SystemState final {
     // message from the queue.
     std::vector<SystemState> get_neighbors();
 
+    // Print a trace of what transpired
+    void print_history() const;
+
     // SystemStates are comparable so we can skip visited states; the history
     // is deliberately not included so states compare equal even if they have
     // a different history
@@ -177,17 +181,6 @@ struct Model final {
     // Initialize a model with an initial state (a vector of machines) and some
     // invariants
     Model(std::vector<Machine*> m, std::vector<Invariant> i);
-
-    // Ensures that `s` validates against all members of `invariants`.
-    bool check_invariants(SystemState s) const {
-        for (const Invariant& i : invariants) {
-            if (!i.check(s)) {
-                fprintf(stderr, "INVARIANT VIOLATED: %s\n", i.name);
-                return false;
-            }
-        }
-        return true;
-    }
 
     // The primary model checking routine; returns a list of states the model
     // may terminate in.
