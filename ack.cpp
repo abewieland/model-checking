@@ -105,7 +105,6 @@ int main() {
     Model model{m, std::vector<Invariant>{}};
 
     std::vector<SystemState> res = model.run();
-    std::cout << "Simulation exited with " << res.size()
-        << " terminating states" << std::endl;
+    printf("Simluation exited with %lu terminating states.\n", res.size());
     return 0;
 }

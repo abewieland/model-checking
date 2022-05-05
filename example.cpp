@@ -1,4 +1,5 @@
 #include <string.h>
+#include <stdlib.h>
 #include "model.hpp"
 
 // A simple example of many sender machines sending messages to a single
@@ -18,7 +19,7 @@ struct Sender : Machine {
     std::vector<Message*> on_startup() {
         std::vector<Message*> ret;
         ret.push_back(new Message(id, dst, 0));
-        std::cout << "Sender " << id << " sent its message." << std::endl;
+        printf("Sender %u sent its message.\n", id);
         return ret;
     }
 
@@ -54,16 +55,30 @@ struct Receiver : Machine {
     }
 };
 
-int main() {
+int main(int argc, char** argv) {
+    size_t n = 9;
+    if (argc > 2) {
+        fprintf(stderr, "usage: %s [n]\n    n: number of senders\n", argv[0]);
+        return 1;
+    }
+    if (argc > 1 && *argv[1]) {
+        char* end = nullptr;
+        size_t senders = strtoul(argv[1], &end, 10);
+        if (*end) {
+            fprintf(stderr, "invalid number %s\n", argv[1]);
+            fprintf(stderr, "usage: %s [n]\n    n: number of senders\n", argv[0]);
+            return 1;
+        }
+        n = senders;
+    }
     std::vector<Machine*> m;
     m.push_back(new Receiver(0));
-    for (int i = 1; i <= 9; i++) {
+    for (size_t i = 1; i <= n; i++) {
         m.push_back(new Sender(i, 0));
     }
     Model model{m, std::vector<Invariant>{}};
 
     std::vector<SystemState> res = model.run();
-    std::cout << "Simulation exited with " << res.size()
-        << " terminating states" << std::endl;
+    printf("Simluation exited with %lu terminating states.\n", res.size());
     return 0;
 }

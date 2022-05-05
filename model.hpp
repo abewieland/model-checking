@@ -3,7 +3,7 @@
 #include <set>
 #include <string>
 #include <functional>
-#include <iostream>
+#include <stdio.h>
 
 class Machine;
 
@@ -127,10 +127,10 @@ struct SystemState final {
 
 struct Invariant final {
     // An invariant is simply a named predicate over the state of a system.
-    std::string name;
+    const char* name;
     std::function<bool(SystemState)> check;
 
-    Invariant(std::string s, std::function<bool(SystemState)> fn)
+    Invariant(const char* s, std::function<bool(SystemState)> fn)
         : name(s), check(fn) {}
 };
 
@@ -153,7 +153,7 @@ struct Model final {
     bool check_invariants(SystemState s) const {
         for (const Invariant& i : invariants) {
             if (!i.check(s)) {
-                std::cerr << "INVARIANT VIOLATED: " << i.name << std::endl;
+                fprintf(stderr, "INVARIANT VIOLATED: %s\n", i.name);
                 return false;
             }
         }

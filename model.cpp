@@ -59,9 +59,8 @@ Model::Model(std::vector<Machine*> m, std::vector<Invariant> i)
     // Visit the initial state first.
     pending.push(s);
 
-    std::cout << "Initialized a new model with " << s.machines.size()
-              << " machines and " << invariants.size() << " invariants."
-              << std::endl;
+    printf("Initialized a new model with %lu machines and %lu invariants.\n",
+           s.machines.size(), invariants.size());
 }
 
 std::vector<SystemState> Model::run() {
@@ -76,9 +75,8 @@ std::vector<SystemState> Model::run() {
         // possible
         visited.insert(s);
 
-        if (!check_invariants(s)) {
-            std::cerr << "Model error! Did not pass invariants." << std::endl;
-        }
+        if (!check_invariants(s))
+            fprintf(stderr, "Model error! Did not pass invariants.\n");
 
         std::vector<SystemState> neighbors = s.get_neighbors();
         if (!neighbors.size()) terminating.push_back(s);
