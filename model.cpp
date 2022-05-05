@@ -4,8 +4,10 @@ std::vector<SystemState> SystemState::get_neighbors() {
     std::vector<SystemState> results;
     for (size_t i = 0; i < messages.size(); ++i) {
         // Each message may be delivered to make a new state
-        Diff d;
-        d.delivered = messages[i];
+        Diff* d = new Diff();
+        d->delivered = messages[i];
+        // no need to increment the refcount on d->delivered, because while d
+        // will now own it, next will no longer own it
 
         // The SystemState copy constructor copies the machine and message
         // vectors of pointers, but not their contents.
@@ -14,17 +16,21 @@ std::vector<SystemState> SystemState::get_neighbors() {
         // Since accepting a message may mutate state, clone the machine first;
         // if it didn't change, we'll delete it later
         next.messages.erase(next.messages.begin() + i);
-        Machine* target = next.machines[d.delivered->dst]->clone();
+        Machine* target = next.machines[d->delivered->dst]->clone();
 
         // This fresh machine object will handle the message, possibly emitting
         // new messages. These belong in the new message queue.
-        d.sent = target->handle_message(d.delivered);
-        if (target->compare(next.machines[d.delivered->dst])) {
-            next.machines[d.delivered->dst] = target;
+        d->sent = target->handle_message(d->delivered);
+        if (target->compare(next.machines[d->delivered->dst])) {
+            next.machines[d->delivered->dst] = target;
         } else {
-            delete target;
+            // This should delete it, as it only belonged to this scope
+            target->ref_dec();
         }
-        next.messages.insert(next.messages.end(), d.sent.begin(), d.sent.end());
+        for (Message*& m : d->sent) {
+            m->ref_inc();
+            next.messages.push_back(m);
+        }
         next.history.push_back(d);
         results.push_back(next);
     }
@@ -83,7 +89,10 @@ std::vector<SystemState> Model::run() {
         for (SystemState& neighbor : neighbors) {
             if (visited.find(neighbor) == visited.end()) {
                 pending.push(neighbor);
-            }
+            }/* else {
+                // Don't know if this is legal - can you edit the vector in place?
+                delete &neighbor;
+            }*/
         }
     }
     return terminating;

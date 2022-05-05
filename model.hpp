@@ -10,7 +10,24 @@ class Machine;
 // Machine identifiers
 typedef unsigned id_t;
 
-struct Message {
+struct RefCounter {
+    // A simple reference counter
+
+    RefCounter() : _refcount(1) {}
+    virtual ~RefCounter() {}
+
+    inline void ref_inc() {
+        ++_refcount;
+    }
+    inline void ref_dec() {
+        if (!--_refcount) delete this;
+    }
+
+private:
+    unsigned long _refcount;
+};
+
+struct Message : RefCounter {
     // A Message is the basic unit of communication in the model checker; they
     // are currently immutable and always maintained in memory. Some simple
     // messages are expressible just via different types; others may need to be
@@ -40,7 +57,7 @@ struct Message {
     }
 };
 
-struct Machine {
+struct Machine : RefCounter {
     // This is the base class for state machines in the system. Subclasses
     // will likely add mutable state.
 
@@ -76,11 +93,17 @@ struct Machine {
     virtual int compare(Machine* rhs) const = 0;
 };
 
-struct Diff final {
+struct Diff final : RefCounter {
     // A diff simply captures the messages sent and delivered; only one message
     // is ever delivered for each diff, so no need for a vector there
     std::vector<Message*> sent;
     Message* delivered;
+
+    // Memory cleanup! Note that diffs are now also shared
+    ~Diff() {
+        for (Message*& m : sent) m->ref_dec();
+        delivered->ref_dec();
+    }
 };
 
 struct SystemState final {
@@ -89,7 +112,7 @@ struct SystemState final {
     std::vector<Machine*> machines;
     // States also store an ordered list of diffs, which constitute a method to
     // arrive at this state from the initial state
-    std::vector<Diff> history;
+    std::vector<Diff*> history;
 
     // Initialize with a machine list.
     SystemState(std::vector<Machine*> machines) : machines(machines) {}
@@ -99,9 +122,13 @@ struct SystemState final {
     // or messages. This should be fine, since messages are immutable and
     // machines must be manually copied when acted upon, which is handled by the
     // get_neighbors implementation.
-    SystemState(const SystemState& other) {
-        this->machines = other.machines;
-        this->messages = other.messages;
+    SystemState(const SystemState& rhs) {
+        messages = rhs.messages;
+        for (Message*& m : messages) m->ref_inc();
+        machines = rhs.machines;
+        for (Machine*& m : machines) m->ref_inc();
+        history = rhs.history;
+        for (Diff*& d : history) d->ref_inc();
     }
 
     // Returns a vector of neighboring states, with the added diffs to get
@@ -120,9 +147,13 @@ struct SystemState final {
         return compare(rhs) < 0;
     }
 
-    // This is hard to do, since we don't really know which objects are still
-    // being used; probably a good place for refcounting
-    ~SystemState() {}
+    // The builtin destructor will destroy the vectors, but we have to decrement
+    // all their counters (since they're pointers that may be shared)
+    ~SystemState() {
+        for (Message*& m : messages) m->ref_dec();
+        for (Machine*& m : machines) m->ref_dec();
+        for (Diff*& d : history) d->ref_dec();
+    }
 };
 
 struct Invariant final {
