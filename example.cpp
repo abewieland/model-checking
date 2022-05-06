@@ -75,7 +75,31 @@ int main(int argc, char** argv) {
     for (size_t i = 1; i <= n; i++) {
         m.push_back(new Sender(i, 0));
     }
-    Model model{m, std::vector<Invariant>{}};
+    std::vector<Invariant> i;
+    auto pred = [n] (SystemState s) {
+        // All the sent messages plus everything in the log should cooperatively
+        // contain all numbers only once
+        // For some reason we have to cast void* to unsigned*
+        unsigned* counts = (unsigned*) malloc(n * sizeof *counts);
+        memset(counts, 0, n * sizeof *counts);
+        for (size_t i = 0; i < s.messages.size(); ++i) {
+            counts[s.messages[i]->src]++;
+        }
+        Receiver* r = dynamic_cast<Receiver*>(s.machines[0]);
+        for (size_t i = 0; i < r->log.size(); ++i) {
+            counts[r->log[i]]++;
+        }
+        for (size_t i = 1; i < n; ++i) {
+            if (counts[i] != 1) {
+                free(counts);
+                return false;
+            }
+        }
+        free(counts);
+        return true;
+    };
+    i.push_back(Invariant{"Basic", pred});
+    Model model{m, i};
 
     std::vector<SystemState> res = model.run();
     printf("Simluation exited with %lu terminating states.\n", res.size());
