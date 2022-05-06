@@ -1,5 +1,5 @@
 CXXFLAGS := -Wall -std=c++20 $(CXXFLAGS)
-PROGS = example ack
+PROGS = example ack paxos
 OBJDIR ?= build
 BUILDSTAMP = $(OBJDIR)/stamp
 
