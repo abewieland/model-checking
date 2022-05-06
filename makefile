@@ -1,7 +1,8 @@
 CXXFLAGS := -Wall -std=c++20 $(CXXFLAGS)
 PROGS = example ack paxos
+PREREQS = model
 OBJDIR ?= build
-BUILDSTAMP = $(OBJDIR)/stamp
+BUILDSTAMP := $(OBJDIR)/stamp
 
 all: $(PROGS)
 
@@ -16,13 +17,17 @@ ifeq ($(D),1)
 CXXFLAGS += -g
 endif
 
+# Enable bugs in examples
 ifneq ($(B),)
-CXXFLAGS += -DB=1
+CXXFLAGS += -DB=$(B)
 endif
+
+# Handle prerequisites slightly better
+PREREQFILES := $(foreach req,$(PREREQS),$(OBJDIR)/$(req).o)
 
 # Dependencies
 DEPSOPTS = -MMD
-DEPS = $(wildcard $(OBJDIR)/*.d)
+DEPS := $(wildcard $(OBJDIR)/*.d)
 ifneq ($(DEPS),)
 include $(DEPS)
 endif
@@ -32,10 +37,8 @@ ifneq ($(strip $(OLDFLAGS)),$(strip $(CXXFLAGS)))
 OLDFLAGS := $(shell mkdir -p $(OBJDIR); touch $(BUILDSTAMP); echo "OLDFLAGS := $(CXXFLAGS)" > $(OBJDIR)/_opts.d)
 endif
 
-
-%: $(OBJDIR)/%.o $(OBJDIR)/model.o
+%: $(OBJDIR)/%.o $(PREREQFILES)
 	g++ $(CXXFLAGS) $(LDLIBS) $^ -o $@
-
 
 $(OBJDIR)/%.o: %.cpp $(BUILDSTAMP)
 	g++ $(CXXFLAGS) $(DEPSOPTS) -c $< -o $@
