@@ -1,5 +1,5 @@
 CXXFLAGS := -Wall -std=c++20 $(CXXFLAGS)
-PROGS = example ack paxos replication
+PROGS = example ack paxos
 PREREQS = model
 OBJDIR ?= build
 BUILDSTAMP := $(OBJDIR)/stamp

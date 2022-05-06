@@ -14,7 +14,7 @@ struct Sender : Machine {
     }
 
     // The sender sends a message on startup, but does no message handling
-    std::vector<Message*> on_startup() {
+    std::vector<Message*> on_startup() override {
         std::vector<Message*> ret;
         ret.push_back(new Message(id, dst, 0));
         printf("Sender %u sent its message.\n", id);

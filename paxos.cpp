@@ -148,8 +148,8 @@ struct StateMachine : Machine {
             break;
             case MSG_PREPARE_OK:
             {
-                PrepareOk* m = dynamic_cast<PrepareOk*>(m);
-                prepares_received.push_back(m);
+                PrepareOk* mp = dynamic_cast<PrepareOk*>(m);
+                prepares_received.push_back(mp);
                 int prepares_received = count_prepares(selected_n);
                 if(prepares_received > cluster_size / 2) {
                     int v_prime = v_from_max_na(selected_n);
@@ -162,21 +162,21 @@ struct StateMachine : Machine {
             break;
             case MSG_ACCEPT:
             {
-                Accept* m = dynamic_cast<Accept*>(m);
-                int n = m->n;
-                int v = m->v;
+                Accept* ma = dynamic_cast<Accept*>(m);
+                int n = ma->n;
+                int v = ma->v;
                 if(n > np) {
                     this->np = n;
                     this->na = n;
                     this->va = v;
-                    ret.push_back(new AcceptOk(this->id, m->src, n));
+                    ret.push_back(new AcceptOk(this->id, ma->src, n));
                 }
             }
             break;
             case MSG_ACCEPT_OK:
             {
-                AcceptOk* m = dynamic_cast<AcceptOk*>(m);
-                accepts_received.push_back(m);
+                AcceptOk* ma = dynamic_cast<AcceptOk*>(m);
+                accepts_received.push_back(ma);
                 int accepts_received = count_accepts(selected_n);
                 if(accepts_received > (cluster_size / 2)) {
                     final_value = selected_v_prime;
@@ -224,7 +224,7 @@ struct StateMachine : Machine {
 // }
 
 int main() {
-    int num_machines = 3;
+    int num_machines = 10;
     int proposer = 0;
     std::vector<Machine*> m;
 
