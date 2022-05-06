@@ -7,7 +7,6 @@
 #define MSG_PREPARE_OK 2
 #define MSG_ACCEPT 3
 #define MSG_ACCEPT_OK 4
-
 #define MSG_SEND_PROPOSAL 5
 
 
