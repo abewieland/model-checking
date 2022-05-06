@@ -57,7 +57,7 @@ void SystemState::print_history() const {
         // We also probably want the messages to have virtual printing functions
         // (machines too), so that more data can be provided
         fprintf(stderr, "Message from %u (type %d) delivered to %u\n",
-                d->delivered->src, d->delivered->type, d->delivered->type);
+                d->delivered->src, d->delivered->type, d->delivered->dst);
     }
 }
 

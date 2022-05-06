@@ -220,6 +220,18 @@ int main() {
         m.push_back(new Node(i, 1));
     }
     std::vector<Invariant> i;
+    auto pred = [nodes, rounds] (SystemState s) {
+        Client* c = dynamic_cast<Client*>(s.machines[0]);
+        if (!c->index) return true;
+        unsigned ind = c->index - 1;
+        for (size_t i = 2; i < 2 + nodes; ++i) {
+            Node* n = dynamic_cast<Node*>(s.machines[i]);
+            if (n->log.size() <= ind) return false;
+            if (n->log[ind] != c->data[ind]) return false;
+        }
+        return true;
+    };
+    i.push_back(Invariant{"Ack not received before replicatd", pred});
     Model model{m, i};
 
     std::vector<SystemState> res = model.run();
