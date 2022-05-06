@@ -1,3 +1,4 @@
+#include <random>
 #include "model.hpp"
 
 // An implementation of n-way replication, inspired by the P# paper
@@ -208,14 +209,10 @@ int main() {
     size_t nodes = 3;
     size_t rounds = 1;
     std::vector<data_t> data;
-    data.reserve(rounds);
-    FILE* f = fopen("/dev/random", "r");
-    if (!f) {
-        perror("open");
-        return 1;
+    std::mt19937_64 r;
+    for (size_t i = 0; i < rounds; ++i) {
+        data.push_back(r());
     }
-    fread(data.data(), 1, rounds * sizeof(data_t), f);
-    fclose(f);
     std::vector<Machine*> m;
     m.push_back(new Client(0, 1, data));
     m.push_back(new Server(1, 0, 2, nodes));
