@@ -33,7 +33,6 @@ struct Message : RefCounter {
     // messages are expressible just via different types; others may need to be
     // made subclasses to add members (if so, they *must* override compare to
     // effectively differentiate based on new state)
-
     id_t src;
     id_t dst;
     int type;
@@ -44,10 +43,9 @@ struct Message : RefCounter {
     int compare(Message* rhs) const {
         // First compare type, then source and destination
         if (int r = type - rhs->type) return r;
-        if (int r = sub_compare(rhs)) return r;
         if (int r = (int) src - rhs->src) return r;
-        return dst - rhs->dst;
-        // if (int r = (int) dst - rhs->dst) return r;
+        if (int r = (int) dst - rhs->dst) return r;
+        return sub_compare(rhs);
     }
 
     // Compare this message to `rhs`; must be overridden by subclasses if they
@@ -113,7 +111,7 @@ struct SystemState final {
     // arrive at this state from the initial state
     std::vector<Diff*> history;
 
-
+    // 1 + the prececessor's depth
     int depth;
 
     // Initialize with a machine list.
@@ -189,6 +187,12 @@ struct Model final {
     // The primary model checking routine; returns a list of states the model
     // may terminate in.
     std::vector<SystemState> run();
+
+    // We may also run to a maximum depth, at which point all
+    // steps at the max depth become terminating states, so they can
+    // be inspected.
+
+    // max_depth=-1 for no max depth
     std::vector<SystemState> run(int max_depth);
 
 };

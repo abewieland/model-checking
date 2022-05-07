@@ -1,7 +1,7 @@
 #include <time.h>
+#include <iostream>
 #include <limits.h>
 #include "model.hpp"
-
 
 #define MSG_PREPARE 1
 #define MSG_PREPARE_OK 2
@@ -9,9 +9,8 @@
 #define MSG_ACCEPT_OK 4
 #define MSG_SEND_PROPOSAL 5
 
-
-// #define MSG_ACK   2
-// #define MSG_VAL   3
+// Variable names all match
+// http://css.csail.mit.edu/6.824/2014/notes/paxos-code.html
 
 struct Prepare : Message {
     int n;
@@ -69,14 +68,20 @@ struct SendProposal : Message {
 
 struct StateMachine : Machine {
     int cluster_size;
+
     int np;
     int na;
     int va;
+
+    // On startup, this machine will propose a value
+    // by sending a message to itself, requesting a proposal.
     bool should_propose;
 
     std::vector<PrepareOk*> prepares_received;
     std::vector<AcceptOk*> accepts_received;
 
+    // Right now our paxos can only select postive values and
+    // I'm okay with that.
     int selected_n = -1;
     int selected_v_prime = -1;
     int final_value = -1;
@@ -125,71 +130,82 @@ struct StateMachine : Machine {
         return ret;
     }
 
-    std::vector<Message*> handle_message(Message* m) override {
-        std::vector<Message*> ret;
-        switch (m->type) {
-            case MSG_SEND_PROPOSAL:
-            {
-                int n = id*np + 1;
-                selected_n = n;
-                for(id_t i = 0; i < cluster_size; ++i) {
-                    ret.push_back(new Prepare(this->id, i, n));
-                }
-            }
-            break;
-            case MSG_PREPARE:
-            {
-                int n = dynamic_cast<Prepare*>(m)->n;
-                if(n > np) {
-                    this->np = n;
-                    ret.push_back(new PrepareOk(this->id, m->src, n, na, va));
-                }
-            }
-            break;
-            case MSG_PREPARE_OK:
-            {
-                PrepareOk* mp = dynamic_cast<PrepareOk*>(m);
-                prepares_received.push_back(mp);
-                int prepares_received = count_prepares(selected_n);
-                if(prepares_received > cluster_size / 2) {
-                    printf("first accept sent\n");
 
-                    int v_prime = v_from_max_na(selected_n);
-                    for(id_t i = 0; i < cluster_size; ++i) {
-                        selected_v_prime = v_prime;
-                        ret.push_back(new Accept(this->id, i, selected_n, v_prime));
-                    }
-                }
-            }
-            break;
-            case MSG_ACCEPT:
-            {
-                Accept* ma = dynamic_cast<Accept*>(m);
-                int n = ma->n;
-                int v = ma->v;
-                if(n > np) {
-                    this->np = n;
-                    this->na = n;
-                    this->va = v;
-                    ret.push_back(new AcceptOk(this->id, ma->src, n));
-                }
-            }
-            break;
-            case MSG_ACCEPT_OK:
-            {
-                AcceptOk* ma = dynamic_cast<AcceptOk*>(m);
-                accepts_received.push_back(ma);
-                int accepts_received = count_accepts(selected_n);
-                if(accepts_received > (cluster_size / 2)) {
-                    final_value = selected_v_prime;
-                    printf("One path terminated\n");
-                }
-            }
-            break;
-            default:
-            break;
+    std::vector<Message*> handle_proposal_request(SendProposal *m) {
+        std::vector<Message*> ret;
+        int n = id*np + 1;
+        selected_n = n;
+        for(id_t i = 0; i < cluster_size; ++i) {
+            ret.push_back(new Prepare(this->id, i, n));
         }
         return ret;
+    }
+
+    std::vector<Message*> handle_prepare(Prepare *m) {
+        std::vector<Message*> ret;
+        int n = m->n;
+        if(n > np) {
+            this->np = n;
+            ret.push_back(new PrepareOk(this->id, m->src, n, na, va));
+        }
+        return ret;
+    }
+
+    std::vector<Message*> handle_prepare_ok(PrepareOk *m) {
+        std::vector<Message*> ret;
+        prepares_received.push_back(m);
+        int prepares_received = count_prepares(selected_n);
+        if(prepares_received > cluster_size / 2) {
+            printf("first accept sent\n");
+
+            int v_prime = v_from_max_na(selected_n);
+            for(id_t i = 0; i < cluster_size; ++i) {
+                selected_v_prime = v_prime;
+                ret.push_back(new Accept(this->id, i, selected_n, v_prime));
+            }
+        }
+        return ret;
+    }
+
+    std::vector<Message*> handle_accept(Accept *m) {
+        std::vector<Message*> ret;
+        int n = m->n;
+        int v = m->v;
+        if(n > np) {
+            this->np = n;
+            this->na = n;
+            this->va = v;
+            ret.push_back(new AcceptOk(this->id, m->src, n));
+        }
+        return ret;
+    }
+
+    std::vector<Message*> handle_accept_ok(AcceptOk *m) {
+        std::vector<Message*> ret;
+        accepts_received.push_back(m);
+        int accepts_received = count_accepts(selected_n);
+        if(accepts_received > (cluster_size / 2)) {
+            final_value = selected_v_prime;
+            printf("One path terminated\n");
+        }
+        return ret;
+    }
+
+    std::vector<Message*> handle_message(Message* m) override {
+        switch (m->type) {
+        case MSG_SEND_PROPOSAL:
+            return handle_proposal_request(dynamic_cast<SendProposal*>(m));
+        case MSG_PREPARE:
+            return handle_prepare(dynamic_cast<Prepare*>(m));
+        case MSG_PREPARE_OK:
+            return handle_prepare_ok(dynamic_cast<PrepareOk*>(m));
+        case MSG_ACCEPT:
+            return handle_accept(dynamic_cast<Accept*>(m));
+        case MSG_ACCEPT_OK:
+            return handle_accept_ok(dynamic_cast<AcceptOk*>(m));
+        }
+        std::cerr << "Unhandled message type. Aborting." << std::endl;
+        std::abort();
     }
 
     std::vector<Message*> on_startup() override {
@@ -210,8 +226,6 @@ struct StateMachine : Machine {
         if (int r = selected_n - m->selected_n) return r;
         if (int r = selected_v_prime - m->selected_v_prime) return r;
         if (int r = final_value - m->final_value) return r;
-        return final_value - m->final_value;
-
         if (long r = prepares_received.size() - m->prepares_received.size()) return r;
         if (long r = accepts_received.size() - m->accepts_received.size()) return r;
         if (long r = (memcmp(prepares_received.data(), m->prepares_received.data(), prepares_received.size() * sizeof(int)))) return r;
@@ -219,19 +233,14 @@ struct StateMachine : Machine {
     }
 };
 
-
 // bool invariant(SystemState st) {
-//     Sender* s = dynamic_cast<Sender*>(st.machines[0]);
-//     Receiver* r = dynamic_cast<Receiver*>(st.machines[1]);
-//     if (r->recv && r->val != s->val) return false;
-//     if (s->ack && r->val != s->val) return false;
-//     return true;
+
+
 // }
 
 int main() {
-    int num_machines = 6;
+    int num_machines = 3;
     int proposer = 0;
-    int proposer2 = 1;
 
     std::vector<Machine*> m;
 
