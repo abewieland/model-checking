@@ -130,7 +130,7 @@ struct StateMachine : Machine {
         switch (m->type) {
             case MSG_SEND_PROPOSAL:
             {
-                int n = np + 1;
+                int n = id*np + 1;
                 selected_n = n;
                 for(id_t i = 0; i < cluster_size; ++i) {
                     ret.push_back(new Prepare(this->id, i, n));
@@ -152,6 +152,8 @@ struct StateMachine : Machine {
                 prepares_received.push_back(mp);
                 int prepares_received = count_prepares(selected_n);
                 if(prepares_received > cluster_size / 2) {
+                    printf("first accept sent\n");
+
                     int v_prime = v_from_max_na(selected_n);
                     for(id_t i = 0; i < cluster_size; ++i) {
                         selected_v_prime = v_prime;
@@ -180,6 +182,7 @@ struct StateMachine : Machine {
                 int accepts_received = count_accepts(selected_n);
                 if(accepts_received > (cluster_size / 2)) {
                     final_value = selected_v_prime;
+                    printf("One path terminated\n");
                 }
             }
             break;
@@ -207,6 +210,8 @@ struct StateMachine : Machine {
         if (int r = selected_n - m->selected_n) return r;
         if (int r = selected_v_prime - m->selected_v_prime) return r;
         if (int r = final_value - m->final_value) return r;
+        return final_value - m->final_value;
+
         if (long r = prepares_received.size() - m->prepares_received.size()) return r;
         if (long r = accepts_received.size() - m->accepts_received.size()) return r;
         if (long r = (memcmp(prepares_received.data(), m->prepares_received.data(), prepares_received.size() * sizeof(int)))) return r;
@@ -224,12 +229,14 @@ struct StateMachine : Machine {
 // }
 
 int main() {
-    int num_machines = 10;
+    int num_machines = 6;
     int proposer = 0;
+    int proposer2 = 1;
+
     std::vector<Machine*> m;
 
     for(id_t i = 0; i < num_machines; i++) {
-        m.push_back(new StateMachine(i, num_machines, (i==proposer)));
+        m.push_back(new StateMachine(i, num_machines, (proposer == i)));
     }
 
     std::vector<Invariant> i;

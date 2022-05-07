@@ -46,9 +46,10 @@ struct Message : RefCounter {
     int compare(Message* rhs) const {
         // First compare type, then source and destination
         if (int r = type - rhs->type) return r;
+        if (int r = sub_compare(rhs)) return r;
         if (int r = (int) src - rhs->src) return r;
-        if (int r = (int) dst - rhs->dst) return r;
-        return sub_compare(rhs);
+        return dst - rhs->dst;
+        // if (int r = (int) dst - rhs->dst) return r;
     }
 
     // Compare this message to `rhs`; must be overridden by subclasses if they
@@ -114,8 +115,11 @@ struct SystemState final {
     // arrive at this state from the initial state
     std::vector<Diff*> history;
 
+
+    int depth;
+
     // Initialize with a machine list.
-    SystemState(std::vector<Machine*> machines) : machines(machines) {}
+    SystemState(std::vector<Machine*> machines) : machines(machines), depth(0) {}
 
     // When we explore the state graph, we deep copy the SystemState. This
     // copies the vectors of pointers, but does not copy the underlying machines
@@ -129,6 +133,7 @@ struct SystemState final {
         for (Machine*& m : machines) m->ref_inc();
         history = rhs.history;
         for (Diff*& d : history) d->ref_inc();
+        depth = rhs.depth;
     }
 
     // Returns a vector of neighboring states, with the added diffs to get
@@ -186,4 +191,6 @@ struct Model final {
     // The primary model checking routine; returns a list of states the model
     // may terminate in.
     std::vector<SystemState> run();
+    std::vector<SystemState> run(int max_depth);
+
 };

@@ -12,6 +12,7 @@ std::vector<SystemState> SystemState::get_neighbors() {
         // The SystemState copy constructor copies the machine and message
         // vectors of pointers, but not their contents.
         SystemState next = SystemState(*this);
+        next.depth = this->depth + 1;
 
         // Since accepting a message may mutate state, clone the machine first;
         // if it didn't change, we'll delete it later
@@ -40,13 +41,14 @@ std::vector<SystemState> SystemState::get_neighbors() {
 int SystemState::compare(const SystemState& rhs) const {
     // As noted in model.hpp, ignore history
     if (long r = messages.size() - rhs.messages.size()) return r;
-    for (size_t i = 0; i < messages.size(); ++i) {
-        if (int r = messages[i]->compare(rhs.messages[i])) return r;
-    }
     if (long r = machines.size() - rhs.machines.size()) return r;
     for (size_t i = 0; i < machines.size(); ++i) {
         if (int r = machines[i]->compare(rhs.machines[i])) return r;
     }
+    for (size_t i = 0; i < messages.size(); ++i) {
+        if (int r = messages[i]->compare(rhs.messages[i])) return r;
+    }
+
     return 0;
 }
 
@@ -80,8 +82,9 @@ Model::Model(std::vector<Machine*> m, std::vector<Invariant> i)
            s.machines.size(), invariants.size());
 }
 
-std::vector<SystemState> Model::run() {
-    std::vector<SystemState> terminating;
+std::vector<SystemState> Model::run(int max_depth) {
+    // std::vector<SystemState> terminating;
+    std::set<SystemState> terminating;
 
     while (!this->pending.empty()) {
         SystemState s = pending.front();
@@ -101,17 +104,27 @@ std::vector<SystemState> Model::run() {
             }
         }
 
+        if(max_depth != -1 && s.depth >= max_depth) {
+            terminating.insert(s);
+            continue;
+        }
+
         // And add its pending members, if there are any
         std::vector<SystemState> neighbors = s.get_neighbors();
-        if (!neighbors.size()) terminating.push_back(s);
+
+        if (!neighbors.size()) terminating.insert(s);
+
+
         for (SystemState& neighbor : neighbors) {
             if (visited.find(neighbor) == visited.end()) {
                 pending.push(neighbor);
-            }/* else {
-                // Don't know if this is legal - can you edit the vector in place?
-                delete &neighbor;
-            }*/
+            }
         }
     }
-    return terminating;
+    std::vector<SystemState> v(terminating.begin(), terminating.end());
+    return v;
+}
+
+std::vector<SystemState> Model::run() {
+    return run(-1);
 }
