@@ -56,6 +56,7 @@ struct CanonicalizedState {
         for(auto& m : s.machines) {
             CanonicalizedStateEntry n(m->clone());
             contents.push_back(n);
+            m->ref_inc();
         }
 
         for(Message*& m : s.messages) {
@@ -63,9 +64,6 @@ struct CanonicalizedState {
             id_t dst = m->dst;
             contents[src].outgoing.push_back(m);
             contents[dst].incoming.push_back(m);
-            m->ref_inc();
-            m->ref_inc();
-
         }
 
         for(auto& t : contents) {
@@ -83,7 +81,7 @@ struct CanonicalizedState {
 };
 
 
-void SystemState::get_neighbors(std::vector<SystemState>& results, std::vector<Symmetry>& symmetries) {
+void SystemState::get_neighbors(std::vector<SystemState>& results, std::vector<Symmetry>& symmetries, std::set<SystemState>& visited) {
     // std::vector<SystemState> results;
     results.clear();
     results.reserve(messages.size());
@@ -120,7 +118,7 @@ void SystemState::get_neighbors(std::vector<SystemState>& results, std::vector<S
 
         CanonicalizedState can_ver = CanonicalizedState(next);
 
-        if( (canonical_states.find(can_ver) == canonical_states.end())) {
+        if((true || canonical_states.find(can_ver) == canonical_states.end())) {
 
             for (Message*& m : d->sent) {
                 m->ref_inc();
@@ -214,8 +212,7 @@ std::vector<SystemState> Model::run(int max_depth) {
         }
 
         // And add its pending members, if there are any
-        s.get_neighbors(neighbors, this->symmetries);
-        // std::vector<SystemState> neighbors =
+        s.get_neighbors(neighbors, this->symmetries, visited);
 
         if (!neighbors.size()) terminating.insert(s);
 

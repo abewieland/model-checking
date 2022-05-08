@@ -89,11 +89,20 @@ struct StateMachine : Machine {
     StateMachine(id_t id, int cluster_size, int np, int na, int va, bool should_propose)
         : Machine(id), cluster_size(cluster_size), np(np), na(na), va(va), should_propose(should_propose) {}
 
+    StateMachine(id_t id, int cluster_size, int np, int na, int va, bool should_propose, std::set<PrepareOk*> prepares_received, std::set<AcceptOk*> accepts_received, int selected_n, int selected_v_prime, int final_value)
+        : StateMachine(id, cluster_size, np, na, va, should_propose) {
+            this->prepares_received = prepares_received;
+            this->accepts_received = accepts_received;
+            this->selected_n = selected_n;
+            this->selected_v_prime = selected_v_prime;
+            this->final_value = final_value;
+        }
+
     StateMachine(id_t id, int cluster_size, bool should_propose)
         : Machine(id), cluster_size(cluster_size), np(-1), na(-1), va(-1), should_propose(should_propose) {}
 
     StateMachine* clone() const override {
-        return new StateMachine(id, cluster_size, np, na, va, should_propose);
+        return new StateMachine(id, cluster_size, np, na, va, should_propose, prepares_received, accepts_received, selected_n,selected_v_prime, final_value);
     }
 
     int count_prepares(int target_n) {
@@ -133,7 +142,7 @@ struct StateMachine : Machine {
 
     std::vector<Message*> handle_proposal_request(SendProposal *m) {
         std::vector<Message*> ret;
-        int n = id*np + 1;
+        int n = id*np + 10;
         this->va=m->v;
         selected_n = n;
         for(id_t i = 0; i < cluster_size; ++i) {
@@ -144,24 +153,23 @@ struct StateMachine : Machine {
 
     std::vector<Message*> handle_prepare(Prepare *m) {
         std::vector<Message*> ret;
-        int n = m->n;
-        if(n > np) {
-            this->np = n;
-            ret.push_back(new PrepareOk(this->id, m->src, n, na, va));
+        int message_n = m->n;
+        if(message_n > np) {
+            this->np = message_n;
+            ret.push_back(new PrepareOk(this->id, m->src, message_n, na, va));
         }
         return ret;
     }
 
-    std::vector<Message*> handle_prepare_ok(PrepareOk *m) {
+    std::vector<Message*> handle_prepare_ok(PrepareOk *m) {\
         std::vector<Message*> ret;
         prepares_received.insert(m);
-        int prepares_received = count_prepares(selected_n);
-        if(prepares_received > cluster_size / 2) {
-            printf("first accept sent\n");
-
+        // printf("num prepareoks inserted %lu\n", prepares_received.size());
+        int pr = count_prepares(selected_n);
+        if(pr > (cluster_size / 2) + 1) {
             int v_prime = v_from_max_na(selected_n);
+            selected_v_prime = v_prime;
             for(id_t i = 0; i < cluster_size; ++i) {
-                selected_v_prime = v_prime;
                 ret.push_back(new Accept(this->id, i, selected_n, v_prime));
             }
         }
@@ -172,7 +180,7 @@ struct StateMachine : Machine {
         std::vector<Message*> ret;
         int n = m->n;
         int v = m->v;
-        if(n > np) {
+        if(n >= np) {
             this->np = n;
             this->na = n;
             this->va = v;
@@ -182,12 +190,14 @@ struct StateMachine : Machine {
     }
 
     std::vector<Message*> handle_accept_ok(AcceptOk *m) {
+        // printf("accepting ok");
         std::vector<Message*> ret;
         accepts_received.insert(m);
-        int accepts_received = count_accepts(selected_n);
-        if(accepts_received > (cluster_size / 2)) {
+        int accepts_received2 = count_accepts(selected_n);
+
+        if(accepts_received2 > (cluster_size / 2) + 1) {
             final_value = selected_v_prime;
-            printf("One path terminated\n");
+            // printf("One path terminated\n");
         }
         return ret;
     }
@@ -212,7 +222,7 @@ struct StateMachine : Machine {
     std::vector<Message*> on_startup() override {
         std::vector<Message*> ret;
         if(should_propose) {
-            ret.push_back(new SendProposal(id, id, id + 100));
+            ret.push_back(new SendProposal(id, id, id + 200));
         }
         return ret;
     }
@@ -245,13 +255,14 @@ struct StateMachine : Machine {
 // }
 
 int main() {
-    int num_machines = 3;
-    int proposer = 0;
+    int num_machines = 5;
+    int proposer = 1;
+    int proposer2 = 2;
 
     std::vector<Machine*> m;
 
     for(id_t i = 0; i < num_machines; i++) {
-        m.push_back(new StateMachine(i, num_machines, true));
+        m.push_back(new StateMachine(i, num_machines, proposer == i || proposer2 == i));
     }
 
     std::vector<Invariant> i;
@@ -261,6 +272,13 @@ int main() {
     printf("Constructed\n");
 
     std::vector<SystemState> res = model.run();
+
+    for(SystemState i : res) {
+        // for(Machine * m : i.machines) {
+            StateMachine* sm = dynamic_cast<StateMachine*>(i.machines[0]);
+            printf("Learned value of %d\n", sm->final_value);
+        // }
+    }
 
     printf("Simluation exited with %lu terminating states.\n", res.size());
     return 0;
