@@ -77,8 +77,8 @@ struct StateMachine : Machine {
     // by sending a message to itself, requesting a proposal.
     bool should_propose;
 
-    std::vector<PrepareOk*> prepares_received;
-    std::vector<AcceptOk*> accepts_received;
+    std::set<PrepareOk*> prepares_received;
+    std::set<AcceptOk*> accepts_received;
 
     // Right now our paxos can only select postive values and
     // I'm okay with that.
@@ -98,7 +98,7 @@ struct StateMachine : Machine {
 
     int count_prepares(int target_n) {
         int result = 0;
-        for(PrepareOk*& p : prepares_received) {
+        for(auto& p : prepares_received) {
             if(p->n == target_n) {
                 result++;
             }
@@ -108,7 +108,7 @@ struct StateMachine : Machine {
 
     int count_accepts(int target_n) {
         int result = 0;
-        for(AcceptOk*& a : accepts_received) {
+        for(auto& a : accepts_received) {
             if(a->n == target_n) {
                 result++;
             }
@@ -119,7 +119,7 @@ struct StateMachine : Machine {
     int v_from_max_na(int target_n) {
         int highest_na = INT_MIN;
         int ret = INT_MIN;
-        for(PrepareOk*& p : prepares_received) {
+        for(auto& p : prepares_received) {
             if(p->n == target_n) {
                 if(p->na > highest_na) {
                     highest_na = p->na;
@@ -154,7 +154,7 @@ struct StateMachine : Machine {
 
     std::vector<Message*> handle_prepare_ok(PrepareOk *m) {
         std::vector<Message*> ret;
-        prepares_received.push_back(m);
+        prepares_received.insert(m);
         int prepares_received = count_prepares(selected_n);
         if(prepares_received > cluster_size / 2) {
             printf("first accept sent\n");
@@ -183,7 +183,7 @@ struct StateMachine : Machine {
 
     std::vector<Message*> handle_accept_ok(AcceptOk *m) {
         std::vector<Message*> ret;
-        accepts_received.push_back(m);
+        accepts_received.insert(m);
         int accepts_received = count_accepts(selected_n);
         if(accepts_received > (cluster_size / 2)) {
             final_value = selected_v_prime;
@@ -229,11 +229,11 @@ struct StateMachine : Machine {
         if (int r = final_value - m->final_value) return r;
         if (long r = prepares_received.size() - m->prepares_received.size()) return r;
         if (long r = accepts_received.size() - m->accepts_received.size()) return r;
-        for(int i = 0; i < prepares_received.size(); i++) {
-            if (long r = prepares_received[i]->compare((dynamic_cast<Message*>(m->prepares_received[i])))) return r;
+        for(auto it1 = prepares_received.begin(), it2 = m->prepares_received.begin(); it1 != prepares_received.end() && it2 != m->prepares_received.end(); ++it1, ++it2) {
+            if (long r = (*it1)->compare((dynamic_cast<Message*>(*it2)))) return r;
         }
-        for(int i = 0; i < accepts_received.size(); i++) {
-            if (long r = accepts_received[i]->compare((dynamic_cast<Message*>(m->accepts_received[i])))) return r;
+        for(auto it1 = accepts_received.begin(), it2 = m->accepts_received.begin(); it1 != accepts_received.end() && it2 != m->accepts_received.end(); ++it1, ++it2) {
+            if (long r = (*it1)->compare((dynamic_cast<Message*>(*it2)))) return r;
         }
         return 0;
     }

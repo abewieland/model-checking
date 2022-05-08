@@ -91,10 +91,13 @@ std::vector<SystemState> Model::run(int max_depth) {
 
     std::vector<SystemState> neighbors;
 
+    int max_depth_seen = 0;
+
+    int nodes_explored = 0;
     while (!this->pending.empty()) {
         SystemState s = pending.front();
         pending.pop();
-
+        nodes_explored++;
         // Note that we only care about the states we've visited, not how we got
         // there; since this is a BFS, the history should always be the minimum
         // possible
@@ -107,6 +110,11 @@ std::vector<SystemState> Model::run(int max_depth) {
                 s.print_history();
                 exit(1);
             }
+        }
+
+        if(s.depth > max_depth_seen) {
+            max_depth_seen = s.depth;
+            printf("Depth searched: %d\n Total nodes explored: %d\n Unique nodes visited: %lu\n Frontier size: %lu\n", max_depth_seen, nodes_explored, visited.size(), pending.size());
         }
 
         if(max_depth != -1 && s.depth >= max_depth) {
