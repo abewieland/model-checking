@@ -1,6 +1,25 @@
 #include "model.hpp"
 
-void SystemState::get_neighbors(std::vector<SystemState>& results) {
+bool check_sym(Symmetry& checker, SystemState& curr, std::vector<SystemState>& so_far) {
+    // true if symmetric with anything in so_far
+    for(auto s : so_far) {
+        if(checker(curr, s)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool is_novel_state(std::vector<Symmetry>& checkers, SystemState& curr, std::vector<SystemState>& so_far) {
+    for(auto checker : checkers) {
+        if(check_sym(checker, curr, so_far)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void SystemState::get_neighbors(std::vector<SystemState>& results, std::vector<Symmetry>& symmetries) {
     // std::vector<SystemState> results;
     results.clear();
     results.reserve(messages.size());
@@ -25,18 +44,26 @@ void SystemState::get_neighbors(std::vector<SystemState>& results) {
         // This fresh machine object will handle the message, possibly emitting
         // new messages. These belong in the new message queue.
         d->sent = target->handle_message(d->delivered);
+
         if (target->compare(next.machines[d->delivered->dst])) {
             next.machines[d->delivered->dst] = target;
         } else {
             // This should delete it, as it only belonged to this scope
             target->ref_dec();
         }
-        for (Message*& m : d->sent) {
-            m->ref_inc();
-            next.messages.push_back(m);
+
+        if(is_novel_state(symmetries, next, results)) {
+            for (Message*& m : d->sent) {
+                m->ref_inc();
+                next.messages.push_back(m);
+            }
+            next.history.push_back(d);
+            results.push_back(next);
+        } else {
+            target->ref_dec();
         }
-        next.history.push_back(d);
-        results.push_back(next);
+
+
     }
     // return results;
 }
@@ -123,7 +150,7 @@ std::vector<SystemState> Model::run(int max_depth) {
         }
 
         // And add its pending members, if there are any
-        s.get_neighbors(neighbors);
+        s.get_neighbors(neighbors, this->symmetries);
         // std::vector<SystemState> neighbors =
 
         if (!neighbors.size()) terminating.insert(s);

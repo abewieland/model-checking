@@ -103,6 +103,8 @@ struct Diff final : RefCounter {
     }
 };
 
+struct Symmetry;
+
 struct SystemState final {
     // Together, the messages and machines constitute the state of a system.
     std::vector<Message*> messages;
@@ -135,7 +137,7 @@ struct SystemState final {
     // Returns a vector of neighboring states, with the added diffs to get
     // there. For now, a next state is reached by any machine accepting a
     // message from the queue.
-    void get_neighbors(std::vector<SystemState>& results);
+    void get_neighbors(std::vector<SystemState>& results, std::vector<Symmetry>& symmetries);
 
     // Print a trace of what transpired
     void print_history() const;
@@ -169,6 +171,21 @@ struct Invariant final {
         : name(s), check(fn) {}
 };
 
+struct Symmetry final {
+    // A symmetry predicate tells you if two SystemStates are
+    // equivalent and only one should be explored.
+    const char* name;
+    std::function<bool(SystemState&, SystemState&)> check;
+
+    Symmetry(const char* s, std::function<bool(SystemState, SystemState)> fn)
+        : name(s), check(fn) {}
+
+  // overload function call
+  bool operator()(SystemState& a, SystemState& b) {
+     return check(a,b);
+  }
+};
+
 struct Model final {
     // A model is a set of states on which we're doing a BFS, essentially.
     // It also has a set of invariants evaluated at each state, and a history
@@ -179,10 +196,18 @@ struct Model final {
     std::set<SystemState> visited;
 
     std::vector<Invariant> invariants;
+    std::vector<Symmetry> symmetries;
+
 
     // Initialize a model with an initial state (a vector of machines) and some
     // invariants
     Model(std::vector<Machine*> m, std::vector<Invariant> i);
+
+    // Also have some symmetries
+    Model(std::vector<Machine*> m, std::vector<Invariant> i, std::vector<Symmetry> symmetries) : Model(m, i)
+    {
+        this->symmetries = symmetries;
+    };
 
     // The primary model checking routine; returns a list of states the model
     // may terminate in.
