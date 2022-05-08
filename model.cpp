@@ -118,7 +118,7 @@ void SystemState::get_neighbors(std::vector<SystemState>& results, std::vector<S
 
         CanonicalizedState can_ver = CanonicalizedState(next);
 
-        if((true || canonical_states.find(can_ver) == canonical_states.end())) {
+        if((canonical_states.find(can_ver) == canonical_states.end())) {
 
             for (Message*& m : d->sent) {
                 m->ref_inc();
