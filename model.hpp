@@ -135,7 +135,7 @@ struct SystemState final {
     // Returns a vector of neighboring states, with the added diffs to get
     // there. For now, a next state is reached by any machine accepting a
     // message from the queue.
-    std::vector<SystemState> get_neighbors();
+    void get_neighbors(std::vector<SystemState>& results);
 
     // Print a trace of what transpired
     void print_history() const;

@@ -134,6 +134,7 @@ struct StateMachine : Machine {
     std::vector<Message*> handle_proposal_request(SendProposal *m) {
         std::vector<Message*> ret;
         int n = id*np + 1;
+        this->va=m->v;
         selected_n = n;
         for(id_t i = 0; i < cluster_size; ++i) {
             ret.push_back(new Prepare(this->id, i, n));
@@ -228,8 +229,13 @@ struct StateMachine : Machine {
         if (int r = final_value - m->final_value) return r;
         if (long r = prepares_received.size() - m->prepares_received.size()) return r;
         if (long r = accepts_received.size() - m->accepts_received.size()) return r;
-        if (long r = (memcmp(prepares_received.data(), m->prepares_received.data(), prepares_received.size() * sizeof(int)))) return r;
-        return memcmp(accepts_received.data(), m->accepts_received.data(), accepts_received.size() * sizeof(int));
+        for(int i = 0; i < prepares_received.size(); i++) {
+            if (long r = prepares_received[i]->compare((dynamic_cast<Message*>(m->prepares_received[i])))) return r;
+        }
+        for(int i = 0; i < accepts_received.size(); i++) {
+            if (long r = accepts_received[i]->compare((dynamic_cast<Message*>(m->accepts_received[i])))) return r;
+        }
+        return 0;
     }
 };
 
@@ -245,7 +251,7 @@ int main() {
     std::vector<Machine*> m;
 
     for(id_t i = 0; i < num_machines; i++) {
-        m.push_back(new StateMachine(i, num_machines, (proposer == i)));
+        m.push_back(new StateMachine(i, num_machines, true));
     }
 
     std::vector<Invariant> i;

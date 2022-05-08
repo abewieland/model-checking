@@ -1,7 +1,10 @@
 #include "model.hpp"
 
-std::vector<SystemState> SystemState::get_neighbors() {
-    std::vector<SystemState> results;
+void SystemState::get_neighbors(std::vector<SystemState>& results) {
+    // std::vector<SystemState> results;
+    results.clear();
+    results.reserve(messages.size());
+
     for (size_t i = 0; i < messages.size(); ++i) {
         // Each message may be delivered to make a new state
         Diff* d = new Diff();
@@ -35,7 +38,7 @@ std::vector<SystemState> SystemState::get_neighbors() {
         next.history.push_back(d);
         results.push_back(next);
     }
-    return results;
+    // return results;
 }
 
 int SystemState::compare(const SystemState& rhs) const {
@@ -86,6 +89,8 @@ std::vector<SystemState> Model::run(int max_depth) {
     // std::vector<SystemState> terminating;
     std::set<SystemState> terminating;
 
+    std::vector<SystemState> neighbors;
+
     while (!this->pending.empty()) {
         SystemState s = pending.front();
         pending.pop();
@@ -110,7 +115,8 @@ std::vector<SystemState> Model::run(int max_depth) {
         }
 
         // And add its pending members, if there are any
-        std::vector<SystemState> neighbors = s.get_neighbors();
+        s.get_neighbors(neighbors);
+        // std::vector<SystemState> neighbors =
 
         if (!neighbors.size()) terminating.insert(s);
 
