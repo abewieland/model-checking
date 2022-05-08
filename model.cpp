@@ -19,10 +19,76 @@ bool is_novel_state(std::vector<Symmetry>& checkers, SystemState& curr, std::vec
     return true;
 }
 
+struct CanonicalizedStateEntry {
+    Machine * m;
+    std::vector<Message*> outgoing;
+    std::vector<Message*> incoming;
+
+    CanonicalizedStateEntry (Machine *m) : m(m) {}
+
+    int compare(const CanonicalizedStateEntry& rhs) const {
+        if (int r = m->compare_with_type_info(rhs.m)) return r;
+
+        if (long r = outgoing.size() - rhs.outgoing.size()) return r;
+
+        if (long r = incoming.size() - rhs.incoming.size()) return r;
+
+        for (size_t i = 0; i < outgoing.size(); ++i) {
+            if (int r = outgoing[i]->compare_no_src_dst(rhs.outgoing[i])) return r;
+        }
+        for (size_t i = 0; i < incoming.size(); ++i) {
+            if (int r = incoming[i]->compare_no_src_dst(rhs.incoming[i])) return r;
+        }
+        return 0;
+    }
+
+    bool operator<(const CanonicalizedStateEntry& rhs) const {
+        return compare(rhs) < 0;
+    }
+};
+
+struct CanonicalizedState {
+
+    // machine, outgoing, incoming
+    std::vector<CanonicalizedStateEntry> contents;
+
+    CanonicalizedState(SystemState& s) {
+        for(auto& m : s.machines) {
+            CanonicalizedStateEntry n(m->clone());
+            contents.push_back(n);
+        }
+
+        for(Message*& m : s.messages) {
+            id_t src = m->src;
+            id_t dst = m->dst;
+            contents[src].outgoing.push_back(m);
+            contents[dst].incoming.push_back(m);
+            m->ref_inc();
+            m->ref_inc();
+
+        }
+
+        for(auto& t : contents) {
+            t.m->id = 0;
+            std::sort(t.outgoing.begin(), t.outgoing.end());
+            std::sort(t.incoming.begin(), t.incoming.end());
+        }
+
+        std::sort(contents.begin(), contents.end());
+    }
+
+    bool operator<(const CanonicalizedState& rhs) const {
+        return contents < rhs.contents;
+    }
+};
+
+
 void SystemState::get_neighbors(std::vector<SystemState>& results, std::vector<Symmetry>& symmetries) {
     // std::vector<SystemState> results;
     results.clear();
     results.reserve(messages.size());
+
+    std::set<CanonicalizedState> canonical_states;
 
     for (size_t i = 0; i < messages.size(); ++i) {
         // Each message may be delivered to make a new state
@@ -52,18 +118,21 @@ void SystemState::get_neighbors(std::vector<SystemState>& results, std::vector<S
             target->ref_dec();
         }
 
-        if(is_novel_state(symmetries, next, results)) {
+        CanonicalizedState can_ver = CanonicalizedState(next);
+
+        if( (canonical_states.find(can_ver) == canonical_states.end())) {
+
             for (Message*& m : d->sent) {
                 m->ref_inc();
                 next.messages.push_back(m);
             }
             next.history.push_back(d);
             results.push_back(next);
+            canonical_states.insert(can_ver);
+
         } else {
             target->ref_dec();
         }
-
-
     }
     // return results;
 }
@@ -139,11 +208,6 @@ std::vector<SystemState> Model::run(int max_depth) {
             }
         }
 
-        if(s.depth > max_depth_seen) {
-            max_depth_seen = s.depth;
-            printf("Depth searched: %d\n Total nodes explored: %d\n Unique nodes visited: %lu\n Frontier size: %lu\n", max_depth_seen, nodes_explored, visited.size(), pending.size());
-        }
-
         if(max_depth != -1 && s.depth >= max_depth) {
             terminating.insert(s);
             continue;
@@ -160,6 +224,11 @@ std::vector<SystemState> Model::run(int max_depth) {
             if (visited.find(neighbor) == visited.end()) {
                 pending.push(neighbor);
             }
+        }
+
+        if(s.depth > max_depth_seen) {
+            max_depth_seen = s.depth;
+            printf("Depth searched: %d\n Total nodes explored: %d\n Unique nodes visited: %lu\n Frontier size: %lu\n", max_depth_seen, nodes_explored, visited.size(), pending.size());
         }
     }
     std::vector<SystemState> v(terminating.begin(), terminating.end());

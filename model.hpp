@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <typeinfo>
 
 // Machine identifiers
 typedef unsigned id_t;
@@ -20,7 +21,7 @@ struct RefCounter {
         ++_refcount;
     }
     inline void ref_dec() {
-        if (!--_refcount) delete this;
+        // if (!--_refcount) delete this;
     }
 
 private:
@@ -45,6 +46,13 @@ struct Message : RefCounter {
         if (int r = type - rhs->type) return r;
         if (int r = (int) src - rhs->src) return r;
         if (int r = (int) dst - rhs->dst) return r;
+        return sub_compare(rhs);
+    }
+
+    // Compare this message to `rhs` in a classic three-way manner
+    int compare_no_src_dst(Message* rhs) const {
+        // First compare type, then source and destination
+        if (int r = type - rhs->type) return r;
         return sub_compare(rhs);
     }
 
@@ -88,6 +96,18 @@ struct Machine : RefCounter {
     // Compare this message to `rhs` in a classic three-way manner; must be
     // overridden by subclasses to compare all their fields
     virtual int compare(Machine* rhs) const = 0;
+
+    int compare_with_type_info(Machine *rhs) {
+        if(typeid(*this).before(typeid(*rhs))) {
+            return -1;
+        }
+        else if (typeid(*rhs).before(typeid(*this))) {
+            return 1;
+        }
+        else {
+            return compare(rhs);
+        }
+    }
 };
 
 struct Diff final : RefCounter {
