@@ -81,7 +81,7 @@ struct CanonicalizedState {
 };
 
 
-void SystemState::get_neighbors(std::vector<SystemState>& results, std::vector<Symmetry>& symmetries, std::set<SystemState>& visited) {
+void SystemState::get_neighbors(std::vector<SystemState>& results, std::vector<Symmetry>& symmetries, bool skip_symmetries) {
     // std::vector<SystemState> results;
     results.clear();
     results.reserve(messages.size());
@@ -132,8 +132,14 @@ void SystemState::get_neighbors(std::vector<SystemState>& results, std::vector<S
             target->ref_dec();
         }
     }
-    // return results;
 }
+
+
+// set::set<SystemState> get_next_pending(std::set<SystemState>& old_pending) {
+
+
+
+// }
 
 int SystemState::compare(const SystemState& rhs) const {
     // As noted in model.hpp, ignore history
@@ -173,13 +179,13 @@ Model::Model(std::vector<Machine*> m, std::vector<Invariant> i)
     }
 
     // Visit the initial state first.
-    pending.push(s);
+    pending.insert(s);
 
     printf("Initialized a new model with %lu machines and %lu invariants.\n",
            s.machines.size(), invariants.size());
 }
 
-std::vector<SystemState> Model::run(int max_depth) {
+std::vector<SystemState> Model::run(int max_depth, bool skip_symmetries) {
     // std::vector<SystemState> terminating;
     std::set<SystemState> terminating;
 
@@ -188,50 +194,62 @@ std::vector<SystemState> Model::run(int max_depth) {
     int max_depth_seen = 0;
 
     int nodes_explored = 0;
-    while (!this->pending.empty()) {
-        SystemState s = pending.front();
-        pending.pop();
-        nodes_explored++;
-        // Note that we only care about the states we've visited, not how we got
-        // there; since this is a BFS, the history should always be the minimum
-        // possible
-        visited.insert(s);
 
-        // Ensure that `s` validates against all invariants
-        for (const Invariant& i : invariants) {
-            if (!i.check(s)) {
-                fprintf(stderr, "INVARIANT VIOLATED: %s\n", i.name);
-                s.print_history();
-                exit(1);
+    while(!this->pending.empty()) {
+        for (SystemState s : pending) {
+            // SystemState s = pending.front();
+            // pending.pop();
+            nodes_explored++;
+            // Note that we only care about the states we've visited, not how we got
+            // there; since this is a BFS, the history should always be the minimum
+            // possible
+            visited.insert(s);
+
+            // Ensure that `s` validates against all invariants
+            for (const Invariant& i : invariants) {
+                if (!i.check(s)) {
+                    fprintf(stderr, "INVARIANT VIOLATED: %s\n", i.name);
+                    s.print_history();
+                    exit(1);
+                }
+            }
+
+            if(max_depth != -1 && s.depth >= max_depth) {
+                terminating.insert(s);
+                continue;
+            }
+            if(s.depth > max_depth_seen) {
+                max_depth_seen = s.depth;
+                printf("Depth searched: %d\n   Total nodes explored: %d\n   Unique nodes visited: %lu\n   Frontier size: %lu\n",
+                    max_depth_seen, nodes_explored, visited.size(), pending.size());
+
             }
         }
 
-        if(max_depth != -1 && s.depth >= max_depth) {
-            terminating.insert(s);
-            continue;
-        }
-
-        // And add its pending members, if there are any
-        s.get_neighbors(neighbors, this->symmetries, visited);
-
-        if (!neighbors.size()) terminating.insert(s);
-
-
-        for (SystemState& neighbor : neighbors) {
-            if (visited.find(neighbor) == visited.end()) {
-                pending.push(neighbor);
+        std::set<SystemState> new_pending;
+        for (SystemState s : pending) {
+            // And add its pending members, if there are any
+            s.get_neighbors(neighbors, this->symmetries, skip_symmetries);
+            if (!neighbors.size()) terminating.insert(s);
+            // if(neighbors.size()) printf("Sample message queue size: %lu\n", neighbors[0].messages.size());
+            for (SystemState& neighbor : neighbors) {
+                if (visited.find(neighbor) == visited.end()) {
+                    new_pending.insert(neighbor);
+                }
             }
         }
-
-        if(s.depth > max_depth_seen) {
-            max_depth_seen = s.depth;
-            printf("Depth searched: %d\n Total nodes explored: %d\n Unique nodes visited: %lu\n Frontier size: %lu\n", max_depth_seen, nodes_explored, visited.size(), pending.size());
-        }
+        this->pending = new_pending;
     }
+
+
     std::vector<SystemState> v(terminating.begin(), terminating.end());
     return v;
 }
 
 std::vector<SystemState> Model::run() {
-    return run(-1);
+    return run(-1, true);
+}
+
+std::vector<SystemState> Model::run(int max_depth) {
+    return run(max_depth, true);
 }

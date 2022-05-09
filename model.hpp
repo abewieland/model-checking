@@ -157,7 +157,7 @@ struct SystemState final {
     // Returns a vector of neighboring states, with the added diffs to get
     // there. For now, a next state is reached by any machine accepting a
     // message from the queue.
-    void get_neighbors(std::vector<SystemState>& results, std::vector<Symmetry>& symmetries, std::set<SystemState>& visited);
+    void get_neighbors(std::vector<SystemState>& results, std::vector<Symmetry>& symmetries, bool skip_symmetries);
 
     // Print a trace of what transpired
     void print_history() const;
@@ -212,7 +212,7 @@ struct Model final {
     // to arrive at each state.
 
     // Pending, visited are the usual BFS roles.
-    std::queue<SystemState> pending;
+    std::set<SystemState> pending;
     std::set<SystemState> visited;
 
     std::vector<Invariant> invariants;
@@ -238,6 +238,7 @@ struct Model final {
     // be inspected.
 
     // max_depth=-1 for no max depth
+    std::vector<SystemState> run(int max_depth, bool skip_symmetries);
     std::vector<SystemState> run(int max_depth);
 
 };
