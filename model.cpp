@@ -51,6 +51,7 @@ struct LogicalState {
         }
 
         for (LogicalMachine& m : machines) {
+            
             std::sort(m.outgoing.begin(), m.outgoing.end());
             std::sort(m.incoming.begin(), m.incoming.end());
         }
@@ -144,20 +145,23 @@ Model::Model(std::vector<Machine*> m, std::vector<Predicate> i) : invariants(i) 
 }
 
 std::set<SystemState> Model::run(int max_depth, bool exclude_symmetries,
-                                 std::vector<Predicate> interesting_states) {
+                                 std::vector<Predicate> interesting_states,
+                                 bool print) {
     std::set<SystemState> terminating;
-    int current_depth = 0;
-    int nodes_explored = 0;
+    int depth = 0;
+    int nodes_seen = 0;
 
-    while ((max_depth < 0 || current_depth <= max_depth) && !pending.empty()) {
-        printf("Depth searched: %d\n    Total nodes explored: %d\n"
-               "    Unique nodes visited: %lu\n    Frontier size: %lu\n",
-               current_depth, nodes_explored, visited.size(), pending.size());
-        printf("    Sample queue length: %lu\n", pending[0].messages.size());
-        printf("    Terminating states found: %lu\n", terminating.size());
+    while ((max_depth < 0 || depth <= max_depth) && !pending.empty()) {
+        if (print) {
+            printf("Depth searched: %d\n    Total nodes explored: %d\n"
+                   "    Unique nodes visited: %lu\n    Frontier size: %lu\n",
+                   depth, nodes_seen, visited.size(), pending.size());
+            printf("    Sample queue length: %lu\n", pending[0].messages.size());
+            printf("    Terminating states found: %lu\n", terminating.size());
+        }
 
         for (const SystemState& s : pending) {
-            ++nodes_explored;
+            ++nodes_seen;
 
             // Note that we only care about the states we've visited, not how we
             // got there; since this is a BFS, the history should always be the
@@ -186,7 +190,7 @@ std::set<SystemState> Model::run(int max_depth, bool exclude_symmetries,
         }
         pending = get_all_neighbors(pending, exclude_symmetries,
                                     terminating, visited);
-        ++current_depth;
+        ++depth;
     }
     return terminating;
 }

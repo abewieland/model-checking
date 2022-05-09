@@ -231,5 +231,6 @@ struct Model final {
     // and start over from any state which matches
     std::set<SystemState> run(int max_depth = -1,
         bool exclude_symmetries = true,
-        std::vector<Predicate> interesting_states = std::vector<Predicate>{});
+        std::vector<Predicate> interesting_states = std::vector<Predicate>{},
+        bool print = true);
 };
