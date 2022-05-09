@@ -71,7 +71,6 @@ std::vector<SystemState> get_all_neighbors(std::vector<SystemState>& nodes,
     LogicalState empty; // ie, with no machines
 
     for (const SystemState& n : nodes) {
-        int found = 0;
         for (size_t i = 0; i < n.messages.size(); ++i) {
             // Each message may be delivered to make a new state
             Diff* d = new Diff();
@@ -111,7 +110,6 @@ std::vector<SystemState> get_all_neighbors(std::vector<SystemState>& nodes,
                 }
                 next.history.push_back(d);
                 ret.push_back(next);
-                ++found;
 
                 if (exclude_symmetries) {
                     logical_states.insert(ls);
