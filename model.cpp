@@ -5,7 +5,9 @@ struct LogicalMachine {
     std::vector<Message*> outgoing;
     std::vector<Message*> incoming;
 
-    LogicalMachine (Machine* m) : m(m) {}
+    LogicalMachine (Machine* m) : m(m) {
+        m->ref_inc();
+    }
     ~LogicalMachine() {
         m->ref_dec();
         for (Message*& m : outgoing) m->ref_dec();
@@ -38,8 +40,7 @@ struct LogicalState {
     // Copy construct from a (normal) state
     LogicalState(SystemState& s) {
         for (Machine*& m : s.machines) {
-            machines.push_back(LogicalMachine{m});
-            m->ref_inc();
+            machines.emplace_back(m);
         }
 
         for (Message*& m : s.messages) {
@@ -93,6 +94,7 @@ std::vector<SystemState> get_all_neighbors(std::vector<SystemState>& nodes,
             d->sent = target->handle_message(d->delivered);
 
             if (target->compare(next.machines[d->delivered->dst])) {
+                next.machines[d->delivered->dst]->ref_dec();
                 next.machines[d->delivered->dst] = target;
             } else {
                 // This should delete it, as it only belonged to this scope
@@ -151,8 +153,8 @@ std::set<SystemState> Model::run(int max_depth, bool exclude_symmetries,
         printf("Depth searched: %d\n    Total nodes explored: %d\n"
                "    Unique nodes visited: %lu\n    Frontier size: %lu\n",
                current_depth, nodes_explored, visited.size(), pending.size());
-        printf("    Sample queue length %lu\n", pending[0].messages.size());
-        printf("    Terminating states found %lu\n", terminating.size());
+        printf("    Sample queue length: %lu\n", pending[0].messages.size());
+        printf("    Terminating states found: %lu\n", terminating.size());
 
         for (const SystemState& s : pending) {
             ++nodes_explored;
@@ -163,11 +165,22 @@ std::set<SystemState> Model::run(int max_depth, bool exclude_symmetries,
             visited.insert(s);
 
             // Ensure that `s` validates against all invariants
-            for (const Predicate& i : invariants) {
-                if (!i.check(s)) {
-                    printf("INVARIANT VIOLATED: %s\n", i.name);
+            for (const Predicate& p : invariants) {
+                if (!p.match(s)) {
+                    printf("INVARIANT VIOLATED: %s\n", p.name);
                     s.print_history();
                     exit(1);
+                }
+            }
+
+            // Guided search; if a state matches any of the `interesting`
+            // predicates, start over from that state
+            for (const Predicate& p : interesting_states) {
+                if (p.match(s)) {
+                    printf("INTERESTING STATE FOUND: %s\n", p.name);
+                    pending.clear();
+                    pending.push_back(s);
+                    break;
                 }
             }
         }

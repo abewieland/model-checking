@@ -203,10 +203,10 @@ struct SystemState final {
 struct Predicate final {
     // Named predicates over system states
     const char* name;
-    std::function<bool(const SystemState&)> check;
+    std::function<bool(const SystemState&)> match;
 
     Predicate(const char* s, std::function<bool(const SystemState&)> fn)
-        : name(s), check(fn) {}
+        : name(s), match(fn) {}
 };
 
 struct Model final {

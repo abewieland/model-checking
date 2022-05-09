@@ -15,7 +15,12 @@ all: $(PROGS)
 D ?= 0
 ifeq ($(D),1)
 CXXFLAGS += -g
+O := g
 endif
+
+# Optimizations
+O ?= 2
+CXXFLAGS += -O$(O)
 
 # Enable bugs in examples
 ifneq ($(B),)
