@@ -263,7 +263,7 @@ struct StateMachine : Machine {
 int main() {
     int num_machines = 3;
     int proposer = 0;
-    int proposer2 = 1;
+    int proposer2 = 0;
 
     std::vector<Machine*> m;
 

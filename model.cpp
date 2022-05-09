@@ -120,7 +120,7 @@ std::vector<SystemState> get_all_neighbors(std::vector<SystemState>& nodes,
                 d->ref_dec();
             }
         }
-        if (!found) terminating.insert(n);
+        if (!n.messages.size()) terminating.insert(n);
     }
     return ret;
 }
