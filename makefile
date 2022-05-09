@@ -1,5 +1,5 @@
 CXXFLAGS := -Wall -std=c++20 $(CXXFLAGS)
-PROGS = example ack paxos replication
+PROGS = ack example paxos replication
 PREREQS = model
 OBJDIR ?= build
 BUILDSTAMP := $(OBJDIR)/stamp
@@ -22,7 +22,7 @@ ifneq ($(B),)
 CXXFLAGS += -DB=$(B)
 endif
 
-# Handle prerequisites slightly better
+# Prerequisites
 PREREQFILES := $(foreach req,$(PREREQS),$(OBJDIR)/$(req).o)
 
 # Dependencies
