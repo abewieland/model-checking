@@ -51,9 +51,11 @@ struct LogicalState {
         }
 
         for (LogicalMachine& m : machines) {
-            
-            std::sort(m.outgoing.begin(), m.outgoing.end());
-            std::sort(m.incoming.begin(), m.incoming.end());
+            auto lambda = [] (Message* a, Message* b) {
+                return a->logical_compare(b);
+            };
+            std::sort(m.outgoing.begin(), m.outgoing.end(), lambda);
+            std::sort(m.incoming.begin(), m.incoming.end(), lambda);
         }
 
         std::sort(machines.begin(), machines.end());
