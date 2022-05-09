@@ -1,85 +1,83 @@
 #include "model.hpp"
 
-struct CanonicalizedStateEntry {
-    Machine * m;
+struct LogicalMachine {
+    Machine* m;
     std::vector<Message*> outgoing;
     std::vector<Message*> incoming;
 
-    CanonicalizedStateEntry (Machine *m) : m(m) {}
+    LogicalMachine (Machine* m) : m(m) {}
+    ~LogicalMachine() {
+        m->ref_dec();
+        for (Message*& m : outgoing) m->ref_dec();
+        for (Message*& m : incoming) m->ref_dec();
+    }
 
-    int compare(const CanonicalizedStateEntry& rhs) const {
-        if (int r = m->compare_with_type_info(rhs.m)) return r;
-
-        if (long r = outgoing.size() - rhs.outgoing.size()) return r;
-
-        if (long r = incoming.size() - rhs.incoming.size()) return r;
-
+    int compare(const LogicalMachine* rhs) const {
+        if (int r = m->logical_compare(rhs->m)) return r;
+        if (long r = (long) outgoing.size() - rhs->outgoing.size()) return r;
+        if (long r = (long) incoming.size() - rhs->incoming.size()) return r;
         for (size_t i = 0; i < outgoing.size(); ++i) {
-            if (int r = outgoing[i]->compare_no_src_dst(rhs.outgoing[i])) return r;
+            if (int r = outgoing[i]->logical_compare(rhs->outgoing[i])) return r;
         }
         for (size_t i = 0; i < incoming.size(); ++i) {
-            if (int r = incoming[i]->compare_no_src_dst(rhs.incoming[i])) return r;
+            if (int r = incoming[i]->logical_compare(rhs->incoming[i])) return r;
         }
         return 0;
     }
 
-    bool operator<(const CanonicalizedStateEntry& rhs) const {
-        return compare(rhs) < 0;
+    bool operator<(const LogicalMachine& rhs) const {
+        return compare(&rhs) < 0;
     }
 };
 
-struct CanonicalizedState {
+struct LogicalState {
+    std::vector<LogicalMachine> machines;
 
-    // machine, outgoing, incoming
-    std::vector<CanonicalizedStateEntry> contents;
+    LogicalState() {}
 
-    CanonicalizedState() {}
-
-    CanonicalizedState(SystemState& s) {
-        for(auto& m : s.machines) {
-            CanonicalizedStateEntry n(m->clone());
-            contents.push_back(n);
+    // Copy construct from a (normal) state
+    LogicalState(SystemState& s) {
+        for (Machine*& m : s.machines) {
+            machines.push_back(LogicalMachine{m});
             m->ref_inc();
         }
 
-        for(Message*& m : s.messages) {
-            id_t src = m->src;
-            id_t dst = m->dst;
-            contents[src].outgoing.push_back(m);
-            contents[dst].incoming.push_back(m);
+        for (Message*& m : s.messages) {
+            machines[m->src].outgoing.push_back(m);
+            m->ref_inc();
+            machines[m->dst].incoming.push_back(m);
+            m->ref_inc();
         }
 
-        for(auto& t : contents) {
-            t.m->id = 0;
-            std::sort(t.outgoing.begin(), t.outgoing.end());
-            std::sort(t.incoming.begin(), t.incoming.end());
+        for (LogicalMachine& m : machines) {
+            std::sort(m.outgoing.begin(), m.outgoing.end());
+            std::sort(m.incoming.begin(), m.incoming.end());
         }
 
-        std::sort(contents.begin(), contents.end());
+        std::sort(machines.begin(), machines.end());
     }
 
-    bool operator<(const CanonicalizedState& rhs) const {
-        return contents < rhs.contents;
+    bool operator<(const LogicalState& rhs) const {
+        return machines < rhs.machines;
     }
 };
 
+std::vector<SystemState> get_all_neighbors(std::vector<SystemState>& nodes,
+                                           bool exclude_symmetries,
+                                           std::set<SystemState>& terminating,
+                                           std::set<SystemState>& visited) {
+    std::set<LogicalState> logical_states;
+    std::vector<SystemState> ret;
+    LogicalState empty; // ie, with no machines
 
-std::vector<SystemState> get_all_neighbors(std::vector<SystemState>& nodes, bool exclude_symmetries, std::set<SystemState>& terminating, std::set<SystemState>& visited) {
-    std::set<CanonicalizedState> canonical_states;
-    std::vector<SystemState> results;
-    results.clear();
-
-    CanonicalizedState default_cs;
-
-    for(SystemState n : nodes) {
-        auto messages = n.messages;
+    for (const SystemState& n : nodes) {
         int found = 0;
-        for (size_t i = 0; i < messages.size(); ++i) {
+        for (size_t i = 0; i < n.messages.size(); ++i) {
             // Each message may be delivered to make a new state
             Diff* d = new Diff();
-            d->delivered = messages[i];
-            // no need to increment the refcount on d->delivered, because while d
-            // will now own it, next will no longer own it
+            d->delivered = n.messages[i];
+            // no need to increment the refcount on d->delivered, because while
+            // d will now own it, next will no longer
 
             // The SystemState copy constructor copies the machine and message
             // vectors of pointers, but not their contents.
@@ -102,39 +100,34 @@ std::vector<SystemState> get_all_neighbors(std::vector<SystemState>& nodes, bool
                 target->ref_dec();
             }
 
-            CanonicalizedState can_ver = exclude_symmetries ? CanonicalizedState(next) : default_cs;
-
-            if(((!exclude_symmetries) || canonical_states.find(can_ver) == canonical_states.end()) &&
-                visited.find(next) == visited.end()) {
+            LogicalState ls = exclude_symmetries ? LogicalState(next) : empty;
+            // If this is a new state, add it to the list
+            if (visited.find(next) == visited.end()
+                && (!exclude_symmetries
+                    || logical_states.find(ls) == logical_states.end())) {
                 for (Message*& m : d->sent) {
-                    m->ref_inc();
                     next.messages.push_back(m);
+                    m->ref_inc();
                 }
                 next.history.push_back(d);
-                results.push_back(next);
-                found++;
+                ret.push_back(next);
+                ++found;
 
-                if(exclude_symmetries) {
-                    canonical_states.insert(can_ver);
+                if (exclude_symmetries) {
+                    logical_states.insert(ls);
                 }
-
             } else {
-                target->ref_dec();
+                d->ref_dec();
             }
         }
-
-        if(messages.size() == 0) {
-            terminating.insert(n);
-        }
-
+        if (!found) terminating.insert(n);
     }
-    return results;
+    return ret;
 }
 
 // To construct a Model from an initial state and some invariants, run all of
 // the machines' initialization tasks.
-Model::Model(std::vector<Machine*> m, std::vector<Invariant> i)
-    : invariants(i) {
+Model::Model(std::vector<Machine*> m, std::vector<Predicate> i) : invariants(i) {
     SystemState s{m};
 
     // Initialize machines
@@ -150,43 +143,39 @@ Model::Model(std::vector<Machine*> m, std::vector<Invariant> i)
            s.machines.size(), invariants.size());
 }
 
-std::vector<SystemState> Model::run(int max_depth, bool exclude_symmetries) {
+std::set<SystemState> Model::run(int max_depth, bool exclude_symmetries,
+                                 std::vector<Predicate> interesting_states) {
     std::set<SystemState> terminating;
-
     int current_depth = 0;
     int nodes_explored = 0;
 
-    while((max_depth == -1 || current_depth <= max_depth) && !this->pending.empty()) {
-        auto s = pending[0];
-        printf("Depth searched: %d\n   Total nodes explored: %d\n   Unique nodes visited: %lu\n   Frontier size: %lu\n",
-            current_depth, nodes_explored, visited.size(), pending.size());
-        printf("   Sample queue length %lu\n", s.messages.size());
-        printf("   Terminating states found %lu\n", terminating.size());
+    while ((max_depth < 0 || current_depth <= max_depth) && !pending.empty()) {
+        printf("Depth searched: %d\n    Total nodes explored: %d\n"
+               "    Unique nodes visited: %lu\n    Frontier size: %lu\n",
+               current_depth, nodes_explored, visited.size(), pending.size());
+        printf("    Sample queue length %lu\n", pending[0].messages.size());
+        printf("    Terminating states found %lu\n", terminating.size());
 
-        for (SystemState s : pending) {
-            nodes_explored++;
+        for (const SystemState& s : pending) {
+            ++nodes_explored;
 
-            // Note that we only care about the states we've visited, not how we got
-            // there; since this is a BFS, the history should always be the minimum
-            // possible
+            // Note that we only care about the states we've visited, not how we
+            // got there; since this is a BFS, the history should always be the
+            // most minimal possible
             visited.insert(s);
 
             // Ensure that `s` validates against all invariants
-            for (const Invariant& i : invariants) {
+            for (const Predicate& i : invariants) {
                 if (!i.check(s)) {
-                    fprintf(stderr, "INVARIANT VIOLATED: %s\n", i.name);
+                    printf("INVARIANT VIOLATED: %s\n", i.name);
                     s.print_history();
                     exit(1);
                 }
             }
-
         }
-
-        this->pending = get_all_neighbors(pending, exclude_symmetries, terminating, visited);
-        current_depth++;
+        pending = get_all_neighbors(pending, exclude_symmetries,
+                                    terminating, visited);
+        ++current_depth;
     }
-
-
-    std::vector<SystemState> v(terminating.begin(), terminating.end());
-    return v;
+    return terminating;
 }

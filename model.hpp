@@ -21,7 +21,7 @@ struct RefCounter {
         ++_refcount;
     }
     inline void ref_dec() {
-        if (!--_refcount) delete this;
+        //if (!--_refcount) delete this;
     }
 
 private:
@@ -58,6 +58,7 @@ struct Message : RefCounter {
     }
 
     // Print out extra information about this message (extra fields, etc)
+    // Please indent 4 spaces in this function
     virtual void sub_print() const {}
 };
 
@@ -105,13 +106,15 @@ struct Machine : RefCounter {
     }
 };
 
-struct Diff final : RefCounter {
+struct Diff : RefCounter {
     // A Diff captures the change between two states, which may only be caused
     // by a message being delivered or dropped (and if a message is delivered,
     // more may be sent)
     std::vector<Message*> sent;
     Message* delivered;
     Message* dropped;
+
+    Diff() : delivered(nullptr), dropped(nullptr) {}
 
     ~Diff() {
         for (Message*& m : sent) m->ref_dec();
@@ -153,14 +156,14 @@ struct SystemState final {
     // Print a trace of what transpired
     void print_history() const {
         fprintf(stderr, "History stack trace:\n");
-        for (Diff*& d : history) {
+        for (Diff* const& d : history) {
             if (d->delivered) {
-                printf("Message from %u (type %d) delivered to %u\n    ",
+                printf("Message from %u (type %d) delivered to %u\n",
                        d->delivered->src, d->delivered->type, d->delivered->dst);
                 d->delivered->sub_print();
             }
             if (d->dropped) {
-                printf("Message from %u (type %d) dropped\n    ",
+                printf("Message from %u (type %d) dropped\n",
                        d->dropped->src, d->dropped->type);
                 d->dropped->sub_print();
             }
@@ -170,22 +173,22 @@ struct SystemState final {
     // SystemStates are comparable so we can skip visited states; the history
     // is deliberately not included so states compare equal even if they have
     // a different history
-    int compare(const SystemState& rhs) const {
-        if (long r = (long) messages.size() - rhs.messages.size()) return r;
+    int compare(const SystemState* rhs) const {
+        if (long r = (long) messages.size() - rhs->messages.size()) return r;
         for (size_t i = 0; i < messages.size(); ++i) {
-            if (int r = messages[i]->compare(rhs.messages[i])) return r;
+            if (int r = messages[i]->compare(rhs->messages[i])) return r;
         }
-        if (long r = (long) machines.size() - rhs.machines.size()) return r;
+        if (long r = (long) machines.size() - rhs->machines.size()) return r;
         for (size_t i = 0; i < machines.size(); ++i) {
-            if (int r = machines[i]->compare(rhs.machines[i])) return r;
+            if (int r = machines[i]->compare(rhs->machines[i])) return r;
         }
         return 0;
     }
     bool operator==(const SystemState& rhs) const {
-        return !compare(rhs);
+        return !compare(&rhs);
     }
     bool operator<(const SystemState& rhs) const {
-        return compare(rhs) < 0;
+        return compare(&rhs) < 0;
     }
 
     // The builtin destructor will destroy the vectors, but we have to decrement
@@ -200,9 +203,9 @@ struct SystemState final {
 struct Predicate final {
     // Named predicates over system states
     const char* name;
-    std::function<bool(SystemState&)> check;
+    std::function<bool(const SystemState&)> check;
 
-    Invariant(const char* s, std::function<bool(SystemState&)> fn)
+    Predicate(const char* s, std::function<bool(const SystemState&)> fn)
         : name(s), check(fn) {}
 };
 
@@ -226,7 +229,7 @@ struct Model final {
     // `exclude_symmetries` is true, use the symmetry removing optimization.
     // If `interesting_states` has members, check every state against the list
     // and start over from any state which matches
-    std::vector<SystemState> run(int max_depth = -1,
+    std::set<SystemState> run(int max_depth = -1,
         bool exclude_symmetries = true,
         std::vector<Predicate> interesting_states = std::vector<Predicate>{});
 };
