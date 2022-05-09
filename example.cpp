@@ -70,13 +70,14 @@ int main(int argc, char** argv) {
     size_t n = 9;
     bool ordered = false;
     int c;
+    char* end;
     while ((c = getopt(argc, argv, "hn:o")) != -1) {
         switch(c) {
             case 'h':
                 print_usage(argv[0]);
                 return 0;
-            case 'n': {
-                char* end = nullptr;
+            case 'n':
+                end = nullptr;
                 n = strtoul(optarg, &end, 10);
                 if (*end) {
                     fprintf(stderr, "%s: invalid number of senders %s\n",
@@ -85,11 +86,9 @@ int main(int argc, char** argv) {
                     return 1;
                 }
                 break;
-            }
             case 'o':
                 ordered = true;
                 break;
-            case '?':
             default:
                 print_usage(argv[0]);
                 return 1;
@@ -100,6 +99,7 @@ int main(int argc, char** argv) {
         print_usage(argv[0]);
         return 1;
     }
+
     std::vector<Machine*> m;
     m.push_back(new Receiver(0, ordered));
     for (size_t i = 1; i <= n; i++) {
