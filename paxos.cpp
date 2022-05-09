@@ -35,7 +35,6 @@ struct PrepareOk : Message {
     }
 };
 
-
 struct Accept : Message {
     int n;
     int v;
@@ -125,9 +124,9 @@ struct StateMachine : Machine {
         return result;
     }
 
-    int v_from_max_na(int target_n) {
-        int highest_na = INT_MIN;
-        int ret = INT_MIN;
+    int v_from_max_na(int target_n, int my_n, int my_v) {
+        int highest_na = my_n;
+        int ret = my_v;
         for(auto& p : prepares_received) {
             if(p->n == target_n) {
                 if(p->na > highest_na) {
@@ -166,8 +165,8 @@ struct StateMachine : Machine {
         prepares_received.insert(m);
         // printf("num prepareoks inserted %lu\n", prepares_received.size());
         int pr = count_prepares(selected_n);
-        if(pr > (cluster_size / 2) + 1) {
-            int v_prime = v_from_max_na(selected_n);
+        if(pr > (cluster_size / 2)) {
+            int v_prime = v_from_max_na(selected_n, this->selected_n, va);
             selected_v_prime = v_prime;
             for(id_t i = 0; i < cluster_size; ++i) {
                 ret.push_back(new Accept(this->id, i, selected_n, v_prime));
@@ -195,7 +194,7 @@ struct StateMachine : Machine {
         accepts_received.insert(m);
         int accepts_received2 = count_accepts(selected_n);
 
-        if(accepts_received2 > (cluster_size / 2) + 1) {
+        if(accepts_received2 > (cluster_size / 2)) {
             final_value = selected_v_prime;
             // printf("One path terminated\n");
         }
@@ -255,9 +254,9 @@ struct StateMachine : Machine {
 // }
 
 int main() {
-    int num_machines = 5;
-    int proposer = 1;
-    int proposer2 = 2;
+    int num_machines = 3;
+    int proposer = 0;
+    int proposer2 = 1;
 
     std::vector<Machine*> m;
 
@@ -271,7 +270,7 @@ int main() {
     Model model{m, i};
     printf("Constructed\n");
 
-    std::vector<SystemState> res = model.run();
+    std::vector<SystemState> res = model.run(19, true);
 
     for(SystemState i : res) {
         // for(Machine * m : i.machines) {
