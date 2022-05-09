@@ -86,7 +86,7 @@ struct Server : Machine {
     size_t nodes;
     int index;
     data_t data;
-    #if B & 0x1
+    #ifdef B
     unsigned repcount;
     #else
     std::vector<bool> reps;
@@ -95,7 +95,7 @@ struct Server : Machine {
     Server(id_t id, id_t client, id_t first_node, size_t nodes)
         : Machine(id, MCH_SRV), client(client), first_node(first_node),
           nodes(nodes), index(-1) {
-        #if B & 0x1
+        #ifdef B
         repcount = 0;
         #else
         reps.assign(nodes, false);
@@ -106,7 +106,7 @@ struct Server : Machine {
         Server* s = new Server(id, client, first_node, nodes);
         s->index = index;
         s->data = data;
-        #if B & 0x1
+        #ifdef B
         s->repcount = repcount;
         #else
         s->reps = reps;
@@ -118,7 +118,7 @@ struct Server : Machine {
         Server* s = dynamic_cast<Server*>(rhs);
         if (int r = index - s->index) return r;
         if (long r = (long) data - s->data) return r;
-        #if B & 0x1
+        #ifdef B
         if (int r = (int) repcount - s->repcount) return r;
         #else
         // This is dumb, but whatever (they may be bit vectors, so we can't use
@@ -133,12 +133,10 @@ struct Server : Machine {
         std::vector<Message*> ret;
         switch (m->type) {
             case MSG_CLNT:
-                #if !(B & 0x2)
-                #if B & 0x1
+                #ifdef B
                 repcount = 0;
                 #else
                 reps.assign(nodes, false);
-                #endif
                 #endif
                 ++index;
                 data = dynamic_cast<Payload*>(m)->data;
@@ -151,7 +149,7 @@ struct Server : Machine {
                 if (ind < index) {
                     ret.push_back(new Payload(id, m->src, MSG_REPL, data));
                 } else {
-                    #if B & 0x1
+                    #ifdef B
                     if (++repcount == nodes) {
                         ret.push_back(new Message(id, client, MSG_ACK));
                     }
