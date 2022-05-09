@@ -131,33 +131,6 @@ std::vector<SystemState> get_all_neighbors(std::vector<SystemState>& nodes, bool
     return results;
 }
 
-
-
-int SystemState::compare(const SystemState& rhs) const {
-    // As noted in model.hpp, ignore history
-    if (long r = messages.size() - rhs.messages.size()) return r;
-    if (long r = machines.size() - rhs.machines.size()) return r;
-    for (size_t i = 0; i < machines.size(); ++i) {
-        if (int r = machines[i]->compare(rhs.machines[i])) return r;
-    }
-    for (size_t i = 0; i < messages.size(); ++i) {
-        if (int r = messages[i]->compare(rhs.messages[i])) return r;
-    }
-
-    return 0;
-}
-
-void SystemState::print_history() const {
-    // We'll probably eventually want to also print the initial state, but meh
-    fprintf(stderr, "History stack trace:\n");
-    for (Diff* const& d : history) {
-        // We also probably want the messages to have virtual printing functions
-        // (machines too), so that more data can be provided
-        fprintf(stderr, "Message from %u (type %d) delivered to %u\n",
-                d->delivered->src, d->delivered->type, d->delivered->dst);
-    }
-}
-
 // To construct a Model from an initial state and some invariants, run all of
 // the machines' initialization tasks.
 Model::Model(std::vector<Machine*> m, std::vector<Invariant> i)
@@ -216,12 +189,4 @@ std::vector<SystemState> Model::run(int max_depth, bool exclude_symmetries) {
 
     std::vector<SystemState> v(terminating.begin(), terminating.end());
     return v;
-}
-
-std::vector<SystemState> Model::run() {
-    return run(-1, true);
-}
-
-std::vector<SystemState> Model::run(int max_depth) {
-    return run(max_depth, true);
 }
