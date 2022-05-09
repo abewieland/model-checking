@@ -1,24 +1,5 @@
 #include "model.hpp"
 
-bool check_sym(Symmetry& checker, SystemState& curr, std::vector<SystemState>& so_far) {
-    // true if symmetric with anything in so_far
-    for(auto s : so_far) {
-        if(checker(curr, s)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool is_novel_state(std::vector<Symmetry>& checkers, SystemState& curr, std::vector<SystemState>& so_far) {
-    for(auto checker : checkers) {
-        if(check_sym(checker, curr, so_far)) {
-            return false;
-        }
-    }
-    return true;
-}
-
 struct CanonicalizedStateEntry {
     Machine * m;
     std::vector<Message*> outgoing;
@@ -52,6 +33,8 @@ struct CanonicalizedState {
     // machine, outgoing, incoming
     std::vector<CanonicalizedStateEntry> contents;
 
+    CanonicalizedState() {}
+
     CanonicalizedState(SystemState& s) {
         for(auto& m : s.machines) {
             CanonicalizedStateEntry n(m->clone());
@@ -81,65 +64,74 @@ struct CanonicalizedState {
 };
 
 
-void SystemState::get_neighbors(std::vector<SystemState>& results, std::vector<Symmetry>& symmetries, bool skip_symmetries) {
-    // std::vector<SystemState> results;
-    results.clear();
-    results.reserve(messages.size());
-
+std::vector<SystemState> get_all_neighbors(std::vector<SystemState>& nodes, bool exclude_symmetries, std::set<SystemState>& terminating, std::set<SystemState>& visited) {
     std::set<CanonicalizedState> canonical_states;
+    std::vector<SystemState> results;
+    results.clear();
 
-    for (size_t i = 0; i < messages.size(); ++i) {
-        // Each message may be delivered to make a new state
-        Diff* d = new Diff();
-        d->delivered = messages[i];
-        // no need to increment the refcount on d->delivered, because while d
-        // will now own it, next will no longer own it
+    CanonicalizedState default_cs;
 
-        // The SystemState copy constructor copies the machine and message
-        // vectors of pointers, but not their contents.
-        SystemState next = SystemState(*this);
-        next.depth = this->depth + 1;
+    for(SystemState n : nodes) {
+        auto messages = n.messages;
+        int found = 0;
+        for (size_t i = 0; i < messages.size(); ++i) {
+            // Each message may be delivered to make a new state
+            Diff* d = new Diff();
+            d->delivered = messages[i];
+            // no need to increment the refcount on d->delivered, because while d
+            // will now own it, next will no longer own it
 
-        // Since accepting a message may mutate state, clone the machine first;
-        // if it didn't change, we'll delete it later
-        next.messages.erase(next.messages.begin() + i);
-        Machine* target = next.machines[d->delivered->dst]->clone();
+            // The SystemState copy constructor copies the machine and message
+            // vectors of pointers, but not their contents.
+            SystemState next = SystemState(n);
+            next.depth = n.depth + 1;
 
-        // This fresh machine object will handle the message, possibly emitting
-        // new messages. These belong in the new message queue.
-        d->sent = target->handle_message(d->delivered);
+            // Since accepting a message may mutate state, clone the machine first;
+            // if it didn't change, we'll delete it later
+            next.messages.erase(next.messages.begin() + i);
+            Machine* target = next.machines[d->delivered->dst]->clone();
 
-        if (target->compare(next.machines[d->delivered->dst])) {
-            next.machines[d->delivered->dst] = target;
-        } else {
-            // This should delete it, as it only belonged to this scope
-            target->ref_dec();
-        }
+            // This fresh machine object will handle the message, possibly emitting
+            // new messages. These belong in the new message queue.
+            d->sent = target->handle_message(d->delivered);
 
-        CanonicalizedState can_ver = CanonicalizedState(next);
-
-        if((canonical_states.find(can_ver) == canonical_states.end())) {
-
-            for (Message*& m : d->sent) {
-                m->ref_inc();
-                next.messages.push_back(m);
+            if (target->compare(next.machines[d->delivered->dst])) {
+                next.machines[d->delivered->dst] = target;
+            } else {
+                // This should delete it, as it only belonged to this scope
+                target->ref_dec();
             }
-            next.history.push_back(d);
-            results.push_back(next);
-            canonical_states.insert(can_ver);
 
-        } else {
-            target->ref_dec();
+            CanonicalizedState can_ver = exclude_symmetries ? CanonicalizedState(next) : default_cs;
+
+            if(((!exclude_symmetries) || canonical_states.find(can_ver) == canonical_states.end()) &&
+                visited.find(next) == visited.end()) {
+                for (Message*& m : d->sent) {
+                    m->ref_inc();
+                    next.messages.push_back(m);
+                }
+                next.history.push_back(d);
+                results.push_back(next);
+                found++;
+
+                if(exclude_symmetries) {
+                    canonical_states.insert(can_ver);
+                }
+
+            } else {
+                target->ref_dec();
+            }
         }
+
+        if(messages.size() == 0) {
+            terminating.insert(n);
+        }
+
     }
+    return results;
 }
 
 
-// set::set<SystemState> get_next_pending(std::set<SystemState>& old_pending) {
-
-
-
-// }
 
 int SystemState::compare(const SystemState& rhs) const {
     // As noted in model.hpp, ignore history
@@ -179,27 +171,28 @@ Model::Model(std::vector<Machine*> m, std::vector<Invariant> i)
     }
 
     // Visit the initial state first.
-    pending.insert(s);
+    pending.push_back(s);
 
     printf("Initialized a new model with %lu machines and %lu invariants.\n",
            s.machines.size(), invariants.size());
 }
 
-std::vector<SystemState> Model::run(int max_depth, bool skip_symmetries) {
-    // std::vector<SystemState> terminating;
+std::vector<SystemState> Model::run(int max_depth, bool exclude_symmetries) {
     std::set<SystemState> terminating;
 
-    std::vector<SystemState> neighbors;
-
-    int max_depth_seen = 0;
-
+    int current_depth = 0;
     int nodes_explored = 0;
 
-    while(!this->pending.empty()) {
+    while((max_depth == -1 || current_depth <= max_depth) && !this->pending.empty()) {
+        auto s = pending[0];
+        printf("Depth searched: %d\n   Total nodes explored: %d\n   Unique nodes visited: %lu\n   Frontier size: %lu\n",
+            current_depth, nodes_explored, visited.size(), pending.size());
+        printf("   Sample queue length %lu\n", s.messages.size());
+        printf("   Terminating states found %lu\n", terminating.size());
+
         for (SystemState s : pending) {
-            // SystemState s = pending.front();
-            // pending.pop();
             nodes_explored++;
+
             // Note that we only care about the states we've visited, not how we got
             // there; since this is a BFS, the history should always be the minimum
             // possible
@@ -214,31 +207,10 @@ std::vector<SystemState> Model::run(int max_depth, bool skip_symmetries) {
                 }
             }
 
-            if(max_depth != -1 && s.depth >= max_depth) {
-                terminating.insert(s);
-                continue;
-            }
-            if(s.depth > max_depth_seen) {
-                max_depth_seen = s.depth;
-                printf("Depth searched: %d\n   Total nodes explored: %d\n   Unique nodes visited: %lu\n   Frontier size: %lu\n",
-                    max_depth_seen, nodes_explored, visited.size(), pending.size());
-
-            }
         }
 
-        std::set<SystemState> new_pending;
-        for (SystemState s : pending) {
-            // And add its pending members, if there are any
-            s.get_neighbors(neighbors, this->symmetries, skip_symmetries);
-            if (!neighbors.size()) terminating.insert(s);
-            // if(neighbors.size()) printf("Sample message queue size: %lu\n", neighbors[0].messages.size());
-            for (SystemState& neighbor : neighbors) {
-                if (visited.find(neighbor) == visited.end()) {
-                    new_pending.insert(neighbor);
-                }
-            }
-        }
-        this->pending = new_pending;
+        this->pending = get_all_neighbors(pending, exclude_symmetries, terminating, visited);
+        current_depth++;
     }
 
 
