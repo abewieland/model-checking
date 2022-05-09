@@ -13,7 +13,8 @@
 
 struct Val : Message {
     int val;
-    Val(id_t src, id_t dst, int val) : Message(src, dst, MSG_VAL), val(val) {}
+    Val(id_t src, id_t dst, int val)
+        : Message(src, dst, MSG_VAL, true), val(val) {}
 
     int sub_compare(Message* rhs) const override {
         return val - dynamic_cast<Val*>(rhs)->val;
@@ -59,7 +60,7 @@ struct Sender : Machine {
         ack = true;
         #endif
         std::vector<Message*> ret;
-        ret.push_back(new Val(id, dst, val));
+        ret.push_back(new Message(id, id, MSG_TMR));
         return ret;
     }
 
@@ -87,7 +88,8 @@ struct Receiver : Machine {
         // Pretty simple for the receiver - send acknowledgment
         std::vector<Message*> ret;
         val = dynamic_cast<Val*>(m)->val;
-        ret.push_back(new Message(id, m->src, MSG_ACK));
+        recv = true;
+        ret.push_back(new Message(id, m->src, MSG_ACK, true));
         return ret;
     }
 
