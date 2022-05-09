@@ -8,6 +8,17 @@ struct LogicalMachine {
     LogicalMachine (Machine* m) : m(m) {
         m->ref_inc();
     }
+
+    // We have to redefine the copy constructor for this to work well
+    LogicalMachine (const LogicalMachine& rhs) {
+        m = rhs.m;
+        m->ref_inc();
+        outgoing = rhs.outgoing;
+        for (Message*& m : outgoing) m->ref_inc();
+        incoming = rhs.incoming;
+        for (Message*& m : incoming) m->ref_inc();
+    }
+
     ~LogicalMachine() {
         m->ref_dec();
         for (Message*& m : outgoing) m->ref_dec();
@@ -37,7 +48,7 @@ struct LogicalState {
 
     LogicalState() {}
 
-    // Copy construct from a (normal) state
+    // Construct from a (normal) state
     LogicalState(SystemState& s) {
         for (Machine*& m : s.machines) {
             machines.emplace_back(m);

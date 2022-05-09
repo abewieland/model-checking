@@ -21,7 +21,7 @@ struct RefCounter {
         ++_refcount;
     }
     inline void ref_dec() {
-        //if (!--_refcount) delete this;
+        if (!--_refcount) delete this;
     }
 
 private:
