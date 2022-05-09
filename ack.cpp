@@ -4,9 +4,12 @@
 // A simple example of two machines, one continuously sending a value to the
 // other until it responds
 
-#define MSG_TIMER 1
-#define MSG_ACK   2
-#define MSG_VAL   3
+#define MSG_TMR 1
+#define MSG_ACK 2
+#define MSG_VAL 3
+
+#define MCH_SND 1
+#define MCH_RCV 2
 
 struct Val : Message {
     int val;
@@ -14,6 +17,10 @@ struct Val : Message {
 
     int sub_compare(Message* rhs) const override {
         return val - dynamic_cast<Val*>(rhs)->val;
+    }
+
+    void sub_print() const override {
+        printf("    Value %d\n", val);
     }
 };
 
@@ -23,7 +30,7 @@ struct Sender : Machine {
     bool ack;
 
     Sender(id_t id, id_t dst, int val)
-        : Machine(id), dst(dst), val(val), ack(false) {}
+        : Machine(id, MCH_SND), dst(dst), val(val), ack(false) {}
 
     Sender* clone() const override {
         Sender* s = new Sender(id, dst, val);
@@ -34,17 +41,14 @@ struct Sender : Machine {
     std::vector<Message*> handle_message(Message* m) override {
         std::vector<Message*> ret;
         switch (m->type) {
-            case MSG_TIMER:
+            case MSG_TMR:
                 if (!ack) {
                     ret.push_back(new Val(id, dst, val));
-                    ret.push_back(new Message(id, id, MSG_TIMER));
+                    ret.push_back(new Message(id, id, MSG_TMR));
                 }
                 break;
             case MSG_ACK:
                 ack = true;
-                break;
-            default:
-                // Maybe throw an error here later or something
                 break;
         }
         return ret;
@@ -59,8 +63,7 @@ struct Sender : Machine {
         return ret;
     }
 
-    int compare(Machine* rhs) const override {
-        if (int r = (int) id - rhs->id) return r;
+    int sub_compare(Machine* rhs) const override {
         Sender* m = dynamic_cast<Sender*>(rhs);
         if (int r = val - m->val) return r;
         return ack - m->ack;
@@ -71,7 +74,7 @@ struct Receiver : Machine {
     int val;
     bool recv;
 
-    Receiver(id_t id) : Machine(id), val(-1), recv(false) {}
+    Receiver(id_t id) : Machine(id, MCH_RCV), val(-1), recv(false) {}
 
     Receiver* clone() const override {
         Receiver* r = new Receiver(id);
@@ -83,23 +86,19 @@ struct Receiver : Machine {
     std::vector<Message*> handle_message(Message* m) override {
         // Pretty simple for the receiver - send acknowledgment
         std::vector<Message*> ret;
-        if (m->type != MSG_VAL) {
-            // Again, like throw an error
-        }
         val = dynamic_cast<Val*>(m)->val;
         ret.push_back(new Message(id, m->src, MSG_ACK));
         return ret;
     }
 
-    int compare(Machine* rhs) const override {
-        if (int r = (int) id - rhs->id) return r;
+    int sub_compare(Machine* rhs) const override {
         Receiver* m = dynamic_cast<Receiver*>(rhs);
         if (int r = val - m->val) return r;
         return recv - m->recv;
     }
 };
 
-bool invariant(SystemState st) {
+bool invariant(const SystemState& st) {
     Sender* s = dynamic_cast<Sender*>(st.machines[0]);
     Receiver* r = dynamic_cast<Receiver*>(st.machines[1]);
     if (r->recv && r->val != s->val) return false;
@@ -112,11 +111,11 @@ int main() {
     std::vector<Machine*> m;
     m.push_back(new Sender(0, 1, rand()));
     m.push_back(new Receiver(1));
-    std::vector<Invariant> i;
-    i.push_back(Invariant{"Consistency", invariant});
+    std::vector<Predicate> i;
+    i.push_back(Predicate{"Consistency", invariant});
     Model model{m, i};
 
-    std::vector<SystemState> res = model.run();
+    std::set<SystemState> res = model.run();
     printf("Simluation exited with %lu terminating states.\n", res.size());
     return 0;
 }

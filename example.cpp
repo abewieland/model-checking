@@ -4,10 +4,13 @@
 // receiver. Due to network asynchrony, the receiver may receive them in any
 // order.
 
+#define MCH_SND 1
+#define MCH_RCV 2
+
 struct Sender : Machine {
     id_t dst;
 
-    Sender(id_t id, id_t dst) : Machine(id), dst(dst) {}
+    Sender(id_t id, id_t dst) : Machine(id, MCH_SND), dst(dst) {}
 
     Sender* clone() const override {
         return new Sender(id, dst);
@@ -21,8 +24,8 @@ struct Sender : Machine {
         return ret;
     }
 
-    int compare(Machine* rhs) const override {
-        return (int) id - rhs->id;
+    int sub_compare(Machine* rhs) const override {
+        return 0;
     }
 };
 
@@ -31,7 +34,7 @@ struct Receiver : Machine {
     // received messages.
     std::vector<id_t> log;
 
-    using Machine::Machine;
+    Receiver(id_t id) : Machine(id, MCH_RCV) {}
 
     Receiver* clone() const override {
         Receiver* r = new Receiver(id);
@@ -41,12 +44,12 @@ struct Receiver : Machine {
 
     // The receiver receives messages, but does nothing on startup
     std::vector<Message*> handle_message(Message* m) override {
+        // log.push_back(m->src);
         log.push_back(0);
         return std::vector<Message*>{};
     }
 
-    int compare(Machine* rhs) const override {
-        if (int r = (int) id - rhs->id) return r;
+    int sub_compare(Machine* rhs) const override {
         Receiver* m = dynamic_cast<Receiver*>(rhs);
         if (long r = log.size() - m->log.size()) return r;
         return memcmp(log.data(), m->log.data(), log.size() * sizeof(int));
@@ -75,8 +78,8 @@ int main(int argc, char** argv) {
     for (size_t i = 1; i <= n; i++) {
         m.push_back(new Sender(i, 0));
     }
-    std::vector<Invariant> i;
-    auto pred = [n] (SystemState s) {
+    std::vector<Predicate> i;
+    auto pred = [n] (const SystemState& s) {
         // All the sent messages plus everything in the log should cooperatively
         // contain all numbers only once
         // For some reason we have to cast void* to unsigned*
@@ -101,7 +104,7 @@ int main(int argc, char** argv) {
     // i.push_back(Invariant{"Basic", pred});
     Model model{m, i};
 
-    std::vector<SystemState> res = model.run();
+    std::set<SystemState> res = model.run();
     printf("Simluation exited with %lu terminating states.\n", res.size());
     return 0;
 }

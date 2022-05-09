@@ -9,6 +9,10 @@
 #define MSG_SYNC  4
 #define MSG_ACK   5
 
+#define MCH_CLNT  1
+#define MCH_SRV   2
+#define MCH_NODE  3
+
 typedef unsigned long data_t;
 
 // A message with a simple data payload, used for both CLNT and REPL messages
@@ -20,6 +24,10 @@ struct Payload : Message {
     int sub_compare(Message* rhs) const override {
         return data - dynamic_cast<Payload*>(rhs)->data;
     }
+
+    void sub_print() const override {
+        printf("    Data: %lu\n", data);
+    }
 };
 
 struct Sync : Message {
@@ -30,6 +38,10 @@ struct Sync : Message {
     int sub_compare(Message* rhs) const override {
         return index - dynamic_cast<Sync*>(rhs)->index;
     }
+
+    void sub_print() const override {
+        printf("    Index: %d\n", index);
+    }
 };
 
 struct Client : Machine {
@@ -39,7 +51,7 @@ struct Client : Machine {
     unsigned index;
 
     Client(id_t id, id_t server, std::vector<data_t> data)
-        : Machine(id), server(server), data(data), index(0) {}
+        : Machine(id, MCH_CLNT), server(server), data(data), index(0) {}
 
     Client* clone() const override {
         Client* c = new Client(id, server, data);
@@ -47,8 +59,7 @@ struct Client : Machine {
         return c;
     }
 
-    int compare(Machine* rhs) const override {
-        if (int r = (int) id - rhs->id) return r;
+    int sub_compare(Machine* rhs) const override {
         return index - dynamic_cast<Client*>(rhs)->index;
     }
 
@@ -82,8 +93,8 @@ struct Server : Machine {
     #endif
 
     Server(id_t id, id_t client, id_t first_node, size_t nodes)
-        : Machine(id), client(client), first_node(first_node), nodes(nodes),
-          index(-1) {
+        : Machine(id, MCH_SRV), client(client), first_node(first_node),
+          nodes(nodes), index(-1) {
         #if B & 0x1
         repcount = 0;
         #else
@@ -103,8 +114,7 @@ struct Server : Machine {
         return s;
     }
 
-    int compare(Machine* rhs) const override {
-        if (int r = (int) id - rhs->id) return r;
+    int sub_compare(Machine* rhs) const override {
         Server* s = dynamic_cast<Server*>(rhs);
         if (int r = index - s->index) return r;
         if (long r = (long) data - s->data) return r;
@@ -168,7 +178,8 @@ struct Node : Machine {
     bool timer;
     std::vector<data_t> log;
 
-    Node(id_t id, id_t server) : Machine(id), server(server), timer(false) {}
+    Node(id_t id, id_t server)
+        : Machine(id, MCH_NODE), server(server), timer(false) {}
 
     Node* clone() const override {
         Node* n = new Node(id, server);
@@ -177,8 +188,7 @@ struct Node : Machine {
         return n;
     }
 
-    int compare(Machine* rhs) const override {
-        if (int r = (int) id - rhs->id) return r;
+    int sub_compare(Machine* rhs) const override {
         Node* n = dynamic_cast<Node*>(rhs);
         if (int r = (int) timer - n->timer) return r;
         if (long r = (long) log.size() - n->log.size()) return r;
@@ -219,8 +229,8 @@ int main() {
     for (size_t i = 2; i < 2 + nodes; ++i) {
         m.push_back(new Node(i, 1));
     }
-    std::vector<Invariant> i;
-    auto pred = [nodes, rounds] (SystemState s) {
+    std::vector<Predicate> i;
+    auto pred = [nodes, rounds] (const SystemState& s) {
         Client* c = dynamic_cast<Client*>(s.machines[0]);
         if (!c->index) return true;
         unsigned ind = c->index - 1;
@@ -231,10 +241,10 @@ int main() {
         }
         return true;
     };
-    i.push_back(Invariant{"Ack not received before replicatd", pred});
+    i.push_back(Predicate{"Ack not received before replicated", pred});
     Model model{m, i};
 
-    std::vector<SystemState> res = model.run();
+    std::set<SystemState> res = model.run();
     printf("Simluation exited with %lu terminating states.\n", res.size());
     return 0;
 }
