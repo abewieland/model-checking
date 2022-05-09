@@ -144,7 +144,7 @@ struct StateMachine : Machine {
         int n = id*np + 10;
         this->va=m->v;
         selected_n = n;
-        for(id_t i = 0; i < cluster_size; ++i) {
+        for(int i = 0; i < cluster_size; ++i) {
             ret.push_back(new Prepare(this->id, i, n));
         }
         return ret;
@@ -168,7 +168,7 @@ struct StateMachine : Machine {
         if(pr > (cluster_size / 2)) {
             int v_prime = v_from_max_na(selected_n, this->selected_n, va);
             selected_v_prime = v_prime;
-            for(id_t i = 0; i < cluster_size; ++i) {
+            for(int i = 0; i < cluster_size; ++i) {
                 ret.push_back(new Accept(this->id, i, selected_n, v_prime));
             }
         }
@@ -248,11 +248,6 @@ struct StateMachine : Machine {
     }
 };
 
-// bool invariant(SystemState st) {
-
-
-// }
-
 int main() {
     int num_machines = 3;
     int proposer = 0;
@@ -260,7 +255,7 @@ int main() {
 
     std::vector<Machine*> m;
 
-    for(id_t i = 0; i < num_machines; i++) {
+    for(int i = 0; i < num_machines; i++) {
         m.push_back(new StateMachine(i, num_machines, proposer == i || proposer2 == i));
     }
 
