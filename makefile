@@ -22,6 +22,12 @@ endif
 O ?= 2
 CXXFLAGS += -O$(O)
 
+# Sanitizers (just blanket for now)
+SAN ?= 0
+ifeq ($(SAN),1)
+CXXFLAGS += -fsanitize=undefined -fsanitize=address -fsanitize=leak
+endif
+
 # Enable bugs in examples
 ifneq ($(B),)
 CXXFLAGS += -DB=$(B)
