@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <typeinfo>
 
 // Machine identifiers
 typedef unsigned id_t;
@@ -20,7 +21,7 @@ struct RefCounter {
         ++_refcount;
     }
     inline void ref_dec() {
-        if (!--_refcount) delete this;
+        // if (!--_refcount) delete this;
     }
 
 private:
@@ -33,7 +34,6 @@ struct Message : RefCounter {
     // messages are expressible just via different types; others may need to be
     // made subclasses to add members (if so, they *must* override compare to
     // effectively differentiate based on new state)
-
     id_t src;
     id_t dst;
     int type;
@@ -46,6 +46,13 @@ struct Message : RefCounter {
         if (int r = type - rhs->type) return r;
         if (int r = (int) src - rhs->src) return r;
         if (int r = (int) dst - rhs->dst) return r;
+        return sub_compare(rhs);
+    }
+
+    // Compare this message to `rhs` in a classic three-way manner
+    int compare_no_src_dst(Message* rhs) const {
+        // First compare type, then source and destination
+        if (int r = type - rhs->type) return r;
         return sub_compare(rhs);
     }
 
@@ -89,6 +96,18 @@ struct Machine : RefCounter {
     // Compare this message to `rhs` in a classic three-way manner; must be
     // overridden by subclasses to compare all their fields
     virtual int compare(Machine* rhs) const = 0;
+
+    int compare_with_type_info(Machine *rhs) {
+        if(typeid(*this).before(typeid(*rhs))) {
+            return -1;
+        }
+        else if (typeid(*rhs).before(typeid(*this))) {
+            return 1;
+        }
+        else {
+            return compare(rhs);
+        }
+    }
 };
 
 struct Diff final : RefCounter {
@@ -104,6 +123,7 @@ struct Diff final : RefCounter {
     }
 };
 
+
 struct SystemState final {
     // Together, the messages and machines constitute the state of a system.
     std::vector<Message*> messages;
@@ -112,8 +132,11 @@ struct SystemState final {
     // arrive at this state from the initial state
     std::vector<Diff*> history;
 
+    // 1 + the prececessor's depth
+    int depth;
+
     // Initialize with a machine list.
-    SystemState(std::vector<Machine*> machines) : machines(machines) {}
+    SystemState(std::vector<Machine*> machines) : machines(machines), depth(0) {}
 
     // When we explore the state graph, we deep copy the SystemState. This
     // copies the vectors of pointers, but does not copy the underlying machines
@@ -127,12 +150,13 @@ struct SystemState final {
         for (Machine*& m : machines) m->ref_inc();
         history = rhs.history;
         for (Diff*& d : history) d->ref_inc();
+        depth = rhs.depth;
     }
 
     // Returns a vector of neighboring states, with the added diffs to get
     // there. For now, a next state is reached by any machine accepting a
     // message from the queue.
-    std::vector<SystemState> get_neighbors();
+    // void get_neighbors(std::vector<SystemState>& results, std::vector<Symmetry>& symmetries, bool skip_symmetries);
 
     // Print a trace of what transpired
     void print_history() const;
@@ -166,13 +190,14 @@ struct Invariant final {
         : name(s), check(fn) {}
 };
 
+
 struct Model final {
     // A model is a set of states on which we're doing a BFS, essentially.
     // It also has a set of invariants evaluated at each state, and a history
     // to arrive at each state.
 
     // Pending, visited are the usual BFS roles.
-    std::queue<SystemState> pending;
+    std::vector<SystemState> pending;
     std::set<SystemState> visited;
 
     std::vector<Invariant> invariants;
@@ -184,4 +209,13 @@ struct Model final {
     // The primary model checking routine; returns a list of states the model
     // may terminate in.
     std::vector<SystemState> run();
+
+    // We may also run to a maximum depth, at which point all
+    // steps at the max depth become terminating states, so they can
+    // be inspected.
+
+    // max_depth=-1 for no max depth
+    std::vector<SystemState> run(int max_depth, bool exclude_symmetries);
+    std::vector<SystemState> run(int max_depth);
+
 };

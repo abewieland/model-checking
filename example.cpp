@@ -41,7 +41,7 @@ struct Receiver : Machine {
 
     // The receiver receives messages, but does nothing on startup
     std::vector<Message*> handle_message(Message* m) override {
-        log.push_back(m->src);
+        log.push_back(0);
         return std::vector<Message*>{};
     }
 
@@ -52,6 +52,7 @@ struct Receiver : Machine {
         return memcmp(log.data(), m->log.data(), log.size() * sizeof(int));
     }
 };
+
 
 int main(int argc, char** argv) {
     size_t n = 9;
@@ -97,7 +98,7 @@ int main(int argc, char** argv) {
         free(counts);
         return true;
     };
-    i.push_back(Invariant{"Basic", pred});
+    // i.push_back(Invariant{"Basic", pred});
     Model model{m, i};
 
     std::vector<SystemState> res = model.run();
