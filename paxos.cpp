@@ -3,11 +3,11 @@
 #include <limits.h>
 #include "model.hpp"
 
-#define MSG_PREPARE 1
-#define MSG_PREPARE_OK 2
-#define MSG_ACCEPT 3
-#define MSG_ACCEPT_OK 4
-#define MSG_SEND_PROPOSAL 5
+#define MSG_PREPARE        1
+#define MSG_PREPARE_OK     2
+#define MSG_ACCEPT         3
+#define MSG_ACCEPT_OK      4
+#define MSG_SEND_PROPOSAL  5
 
 // Variable names all match
 // http://css.csail.mit.edu/6.824/2014/notes/paxos-code.html
@@ -26,7 +26,8 @@ struct PrepareOk : Message {
     int na;
     int va;
 
-    PrepareOk(id_t src, id_t dst, int n, int na, int va) : Message(src, dst, MSG_PREPARE_OK), n(n), na(na), va(va) {}
+    PrepareOk(id_t src, id_t dst, int n, int na, int va)
+        : Message(src, dst, MSG_PREPARE_OK), n(n), na(na), va(va) {}
 
     int sub_compare(Message* rhs) const override {
         if (int r = n - dynamic_cast<PrepareOk*>(rhs)->n) return r;
@@ -39,7 +40,8 @@ struct Accept : Message {
     int n;
     int v;
 
-    Accept(id_t src, id_t dst, int n, int v) : Message(src, dst, MSG_ACCEPT), n(n), v(v) {}
+    Accept(id_t src, id_t dst, int n, int v)
+        : Message(src, dst, MSG_ACCEPT), n(n), v(v) {}
 
     int sub_compare(Message* rhs) const override {
         if (int r = n - dynamic_cast<Accept*>(rhs)->n) return r;
@@ -49,7 +51,8 @@ struct Accept : Message {
 
 struct AcceptOk : Message {
     int n;
-    AcceptOk(id_t src, id_t dst, int n) : Message(src, dst, MSG_ACCEPT_OK), n(n) {}
+    AcceptOk(id_t src, id_t dst, int n)
+        : Message(src, dst, MSG_ACCEPT_OK), n(n) {}
 
     int sub_compare(Message* rhs) const override {
         return n - dynamic_cast<AcceptOk*>(rhs)->n;
@@ -58,7 +61,8 @@ struct AcceptOk : Message {
 
 struct SendProposal : Message {
     int v;
-    SendProposal(id_t src, id_t dst, int v) : Message(src, dst, MSG_SEND_PROPOSAL), v(v) {}
+    SendProposal(id_t src, id_t dst, int v)
+        : Message(src, dst, MSG_SEND_PROPOSAL), v(v) {}
 
     int sub_compare(Message* rhs) const override {
         return v - dynamic_cast<SendProposal*>(rhs)->v;
@@ -85,11 +89,15 @@ struct StateMachine : Machine {
     int selected_v_prime = -1;
     int final_value = -1;
 
-    StateMachine(id_t id, int cluster_size, int np, int na, int va, bool should_propose)
-        : Machine(id), cluster_size(cluster_size), np(np), na(na), va(va), should_propose(should_propose) {}
+    StateMachine(id_t id, int sz, int np, int na, int va, bool propose)
+        : Machine(id, 0), cluster_size(sz), np(np), na(na), va(va),
+          should_propose(propose) {}
 
-    StateMachine(id_t id, int cluster_size, int np, int na, int va, bool should_propose, std::set<PrepareOk*> prepares_received, std::set<AcceptOk*> accepts_received, int selected_n, int selected_v_prime, int final_value)
-        : StateMachine(id, cluster_size, np, na, va, should_propose) {
+    StateMachine(id_t id, int sz, int np, int na, int va, bool propose,
+                 std::set<PrepareOk*> prepares_received,
+                 std::set<AcceptOk*> accepts_received,
+                 int selected_n, int selected_v_prime, int final_value)
+        : StateMachine(id, sz, np, na, va, propose) {
             this->prepares_received = prepares_received;
             this->accepts_received = accepts_received;
             this->selected_n = selected_n;
@@ -97,11 +105,13 @@ struct StateMachine : Machine {
             this->final_value = final_value;
         }
 
-    StateMachine(id_t id, int cluster_size, bool should_propose)
-        : Machine(id), cluster_size(cluster_size), np(-1), na(-1), va(-1), should_propose(should_propose) {}
+    StateMachine(id_t id, int sz, bool propose)
+        : StateMachine(id, sz, -1, -1, -1, propose) {}
 
     StateMachine* clone() const override {
-        return new StateMachine(id, cluster_size, np, na, va, should_propose, prepares_received, accepts_received, selected_n,selected_v_prime, final_value);
+        return new StateMachine(id, cluster_size, np, na, va, should_propose,
+                                prepares_received, accepts_received, selected_n,
+                                selected_v_prime, final_value);
     }
 
     int count_prepares(int target_n) {
@@ -160,7 +170,7 @@ struct StateMachine : Machine {
         return ret;
     }
 
-    std::vector<Message*> handle_prepare_ok(PrepareOk *m) {\
+    std::vector<Message*> handle_prepare_ok(PrepareOk *m) {
         std::vector<Message*> ret;
         prepares_received.insert(m);
         // printf("num prepareoks inserted %lu\n", prepares_received.size());
@@ -214,8 +224,11 @@ struct StateMachine : Machine {
         case MSG_ACCEPT_OK:
             return handle_accept_ok(dynamic_cast<AcceptOk*>(m));
         }
-        std::cerr << "Unhandled message type. Aborting." << std::endl;
-        std::abort();
+        // Aborting after unknown message seems harsh; maybe we should exit more
+        // cleanly in that case (have a dummy predicate that some value should
+        // always be zero and set it to 1 if an unknown message arrives)
+        //std::cerr << "Unhandled message type. Aborting." << std::endl;
+        //std::abort();
     }
 
     std::vector<Message*> on_startup() override {
@@ -226,9 +239,8 @@ struct StateMachine : Machine {
         return ret;
     }
 
-    int compare(Machine* rhs) const override {
+    int sub_compare(Machine* rhs) const override {
         // pain
-        if (int r = (int) id - rhs->id) return r;
         StateMachine* m = dynamic_cast<StateMachine*>(rhs);
         if (int r = np - m->np) return r;
         if (int r = na - m->na) return r;
@@ -259,13 +271,10 @@ int main() {
         m.push_back(new StateMachine(i, num_machines, proposer == i || proposer2 == i));
     }
 
-    std::vector<Invariant> i;
-    // i.push_back(Invariant{"Consistency", invariant});
-
-    Model model{m, i};
+    Model model{m};
     printf("Constructed\n");
 
-    std::vector<SystemState> res = model.run(19, true);
+    std::set<SystemState> res = model.run(19, true);
 
     for(SystemState i : res) {
         // for(Machine * m : i.machines) {

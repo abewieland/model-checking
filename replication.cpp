@@ -230,7 +230,7 @@ int main() {
         m.push_back(new Node(i, 1));
     }
     std::vector<Predicate> i;
-    auto pred = [nodes, rounds] (SystemState s) {
+    auto pred = [nodes, rounds] (const SystemState& s) {
         Client* c = dynamic_cast<Client*>(s.machines[0]);
         if (!c->index) return true;
         unsigned ind = c->index - 1;
@@ -241,7 +241,7 @@ int main() {
         }
         return true;
     };
-    i.push_back(Predicate{"Ack not received before replicatd", pred});
+    i.push_back(Predicate{"Ack not received before replicated", pred});
     Model model{m, i};
 
     std::set<SystemState> res = model.run();
