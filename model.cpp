@@ -51,6 +51,7 @@ struct LogicalState {
     // Construct from a (normal) state
     LogicalState(SystemState& s) {
         for (Machine*& m : s.machines) {
+            // avoid an extra copy construction via emplacement
             machines.emplace_back(m);
         }
 
@@ -98,13 +99,13 @@ std::vector<SystemState> get_all_neighbors(std::vector<SystemState>& nodes,
             SystemState next = SystemState(n);
             next.depth = n.depth + 1;
 
-            // Since accepting a message may mutate state, clone the machine first;
-            // if it didn't change, we'll delete it later
+            // Since accepting a message may mutate state, clone the machine
+            // first; if it didn't change, we'll delete it later
             next.messages.erase(next.messages.begin() + i);
             Machine* target = next.machines[d->delivered->dst]->clone();
 
-            // This fresh machine object will handle the message, possibly emitting
-            // new messages. These belong in the new message queue.
+            // This fresh machine object will handle the message, possibly
+            // emitting new messages. These belong in the new message queue.
             d->sent = target->handle_message(d->delivered);
 
             if (target->compare(next.machines[d->delivered->dst])) {
@@ -115,15 +116,17 @@ std::vector<SystemState> get_all_neighbors(std::vector<SystemState>& nodes,
                 target->ref_dec();
             }
 
+            // Add the new messages to the queue
+            for (Message*& m : d->sent) {
+                next.messages.push_back(m);
+                m->ref_inc();
+            }
+
+            // And if this is a new state, add it to the list
             LogicalState ls = exclude_symmetries ? LogicalState(next) : empty;
-            // If this is a new state, add it to the list
             if (visited.find(next) == visited.end()
                 && (!exclude_symmetries
                     || logical_states.find(ls) == logical_states.end())) {
-                for (Message*& m : d->sent) {
-                    next.messages.push_back(m);
-                    m->ref_inc();
-                }
                 next.history.push_back(d);
                 ret.push_back(next);
 
