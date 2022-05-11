@@ -76,6 +76,8 @@ struct Client : Machine {
             if (++index < data.size()) {
                 ret.push_back(new Payload(id, server, MSG_CLNT, data[index]));
             }
+        } else {
+            error = ERR_BADMSG;
         }
         return ret;
     }
@@ -145,7 +147,7 @@ struct Server : Machine {
                     ret.push_back(new Payload(id, first_node + i, MSG_REPL, data));
                 }
                 break;
-            case MSG_SYNC:
+            case MSG_SYNC: {
                 int ind = dynamic_cast<Sync*>(m)->index;
                 if (ind < index) {
                     ret.push_back(new Payload(id, m->src, MSG_REPL, data));
@@ -166,7 +168,10 @@ struct Server : Machine {
                     #endif
                 }
                 break;
-            // do nothing in other cases
+            }
+            default:
+                error = ERR_BADMSG;
+                break;
         }
         return ret;
     }
@@ -207,6 +212,9 @@ struct Node : Machine {
             case MSG_TIME:
                 ret.push_back(new Message(id, id, MSG_TIME));
                 ret.push_back(new Sync(id, server, log.size()));
+                break;
+            default:
+                error = ERR_BADMSG;
                 break;
         }
         return ret;

@@ -172,6 +172,14 @@ std::vector<SystemState> get_all_neighbors(std::vector<SystemState>& nodes,
 Model::Model(std::vector<Machine*> m, std::vector<Predicate> i) : invariants(i) {
     SystemState s{m};
 
+    // All models have error handling invariants
+    invariants.emplace_back("Valid messages", [] (const SystemState& s) {
+        for (Machine* const& m : s.machines) {
+            if (m->error == ERR_BADMSG) return false;
+        }
+        return true;
+    });
+
     // Initialize machines
     for (Machine*& m : s.machines) {
         std::vector<Message*> new_msg = m->on_startup();

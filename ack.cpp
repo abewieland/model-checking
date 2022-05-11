@@ -51,6 +51,9 @@ struct Sender : Machine {
             case MSG_ACK:
                 ack = true;
                 break;
+            default:
+                error = ERR_BADMSG;
+                break;
         }
         return ret;
     }
@@ -87,9 +90,13 @@ struct Receiver : Machine {
     std::vector<Message*> handle_message(Message* m) override {
         // Pretty simple for the receiver - send acknowledgment
         std::vector<Message*> ret;
-        val = dynamic_cast<Val*>(m)->val;
-        recv = true;
-        ret.push_back(new Message(id, m->src, MSG_ACK, true));
+        if (m->type == MSG_VAL) {
+            val = dynamic_cast<Val*>(m)->val;
+            recv = true;
+            ret.push_back(new Message(id, m->src, MSG_ACK, true));
+        } else {
+            error = ERR_BADMSG;
+        }
         return ret;
     }
 

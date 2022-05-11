@@ -66,6 +66,9 @@ struct Message : RefCounter {
     virtual void sub_print() const {}
 };
 
+// Can define additional errors here
+#define ERR_BADMSG  1
+
 struct Machine : RefCounter {
     // A Machine is the base class for state machines in the system. Subclasses
     // may add mutable state. Like messages, they are parameterized by a type
@@ -73,8 +76,9 @@ struct Machine : RefCounter {
     // since all machines must store some additional state
     id_t id;
     int type;
+    int error;
 
-    Machine(id_t id, int type) : id(id), type(type) {}
+    Machine(id_t id, int type) : id(id), type(type), error(0) {}
 
     // A machine must be cloneable to allow for mutation. Subclasses must
     // implement this method such that `compare(clone()) == 0`.

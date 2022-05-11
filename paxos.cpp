@@ -213,22 +213,20 @@ struct StateMachine : Machine {
 
     std::vector<Message*> handle_message(Message* m) override {
         switch (m->type) {
-        case MSG_SEND_PROPOSAL:
-            return handle_proposal_request(dynamic_cast<SendProposal*>(m));
-        case MSG_PREPARE:
-            return handle_prepare(dynamic_cast<Prepare*>(m));
-        case MSG_PREPARE_OK:
-            return handle_prepare_ok(dynamic_cast<PrepareOk*>(m));
-        case MSG_ACCEPT:
-            return handle_accept(dynamic_cast<Accept*>(m));
-        case MSG_ACCEPT_OK:
-            return handle_accept_ok(dynamic_cast<AcceptOk*>(m));
+            case MSG_SEND_PROPOSAL:
+                return handle_proposal_request(dynamic_cast<SendProposal*>(m));
+            case MSG_PREPARE:
+                return handle_prepare(dynamic_cast<Prepare*>(m));
+            case MSG_PREPARE_OK:
+                return handle_prepare_ok(dynamic_cast<PrepareOk*>(m));
+            case MSG_ACCEPT:
+                return handle_accept(dynamic_cast<Accept*>(m));
+            case MSG_ACCEPT_OK:
+                return handle_accept_ok(dynamic_cast<AcceptOk*>(m));
+            default:
+                error = ERR_BADMSG;
+                return std::vector<Message*>{};
         }
-        // Aborting after unknown message seems harsh; maybe we should exit more
-        // cleanly in that case (have a dummy predicate that some value should
-        // always be zero and set it to 1 if an unknown message arrives)
-        //std::cerr << "Unhandled message type. Aborting." << std::endl;
-        //std::abort();
     }
 
     std::vector<Message*> on_startup() override {
