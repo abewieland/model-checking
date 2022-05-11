@@ -36,8 +36,12 @@ struct Message : RefCounter {
     id_t src;
     id_t dst;
     int type;
+    // may_drop should be uniquely determined by type, and thus is not
+    // separately compared
+    bool may_drop;
 
-    Message(id_t src, id_t dst, int type) : src(src), dst(dst), type(type) {}
+    Message(id_t src, id_t dst, int type, bool may_drop = false)
+        : src(src), dst(dst), type(type), may_drop(may_drop) {}
 
     // Perform a three-way comparison of this message to `rhs`
     int compare(Message* rhs) const {

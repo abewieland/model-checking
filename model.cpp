@@ -9,7 +9,8 @@ struct LogicalMachine {
         m->ref_inc();
     }
 
-    // We have to redefine the copy constructor for this to work well
+    // We have to override the default copy constructor to ensure the refcounts
+    // are correct
     LogicalMachine (const LogicalMachine& rhs) {
         m = rhs.m;
         m->ref_inc();
@@ -51,6 +52,7 @@ struct LogicalState {
     // Construct from a (normal) state
     LogicalState(SystemState& s) {
         for (Machine*& m : s.machines) {
+            // avoid an extra copy construction via emplacement
             machines.emplace_back(m);
         }
 
@@ -77,61 +79,87 @@ struct LogicalState {
     }
 };
 
+#define in_set(set, val) ((set).find(val) != (set).end())
+
 std::vector<SystemState> get_all_neighbors(std::vector<SystemState>& nodes,
                                            bool exclude_symmetries,
                                            std::set<SystemState>& terminating,
                                            std::set<SystemState>& visited) {
     std::set<LogicalState> logical_states;
     std::vector<SystemState> ret;
-    LogicalState empty; // ie, with no machines
 
     for (const SystemState& n : nodes) {
         for (size_t i = 0; i < n.messages.size(); ++i) {
-            // Each message may be delivered to make a new state
-            Diff* d = new Diff();
-            d->delivered = n.messages[i];
-            // no need to increment the refcount on d->delivered, because while
-            // d will now own it, next will no longer
+            // Each message may be delivered or dropped to make a new state
+            Diff* del = new Diff();
+            Diff* drop = new Diff();
+            del->delivered = n.messages[i];
+            drop->dropped = n.messages[i];
+            // no need to increment these refcounts, because while they now own
+            // them, their next states won't
 
-            // The SystemState copy constructor copies the machine and message
-            // vectors of pointers, but not their contents.
-            SystemState next = SystemState(n);
-            next.depth = n.depth + 1;
+            SystemState next_del = SystemState(n);
+            next_del.depth = n.depth + 1;
+            next_del.messages.erase(next_del.messages.begin() + i);
+            SystemState next_drop = SystemState(n);
+            next_drop.depth = n.depth + 1;
+            next_drop.messages.erase(next_drop.messages.begin() + i);
 
-            // Since accepting a message may mutate state, clone the machine first;
-            // if it didn't change, we'll delete it later
-            next.messages.erase(next.messages.begin() + i);
-            Machine* target = next.machines[d->delivered->dst]->clone();
+            // Since accepting a message may mutate state, clone the machine
+            // first; if it didn't change, we'll delete it later
+            Machine* target = next_del.machines[del->delivered->dst]->clone();
 
-            // This fresh machine object will handle the message, possibly emitting
-            // new messages. These belong in the new message queue.
-            d->sent = target->handle_message(d->delivered);
+            // This fresh machine object will handle the message, possibly
+            // emitting new messages. These belong in the new message queue.
+            del->sent = target->handle_message(del->delivered);
 
-            if (target->compare(next.machines[d->delivered->dst])) {
-                next.machines[d->delivered->dst]->ref_dec();
-                next.machines[d->delivered->dst] = target;
+            if (target->compare(next_del.machines[del->delivered->dst])) {
+                next_del.machines[del->delivered->dst]->ref_dec();
+                next_del.machines[del->delivered->dst] = target;
             } else {
                 // This should delete it, as it only belonged to this scope
                 target->ref_dec();
             }
 
-            LogicalState ls = exclude_symmetries ? LogicalState(next) : empty;
-            // If this is a new state, add it to the list
-            if (visited.find(next) == visited.end()
-                && (!exclude_symmetries
-                    || logical_states.find(ls) == logical_states.end())) {
-                for (Message*& m : d->sent) {
-                    next.messages.push_back(m);
-                    m->ref_inc();
-                }
-                next.history.push_back(d);
-                ret.push_back(next);
+            // Add the new messages to the queue
+            for (Message*& m : del->sent) {
+                next_del.messages.push_back(m);
+                m->ref_inc();
+            }
 
-                if (exclude_symmetries) {
-                    logical_states.insert(ls);
+            // And if this is a new state, add it to the list
+            if (exclude_symmetries) {
+                LogicalState ldel{next_del};
+                LogicalState ldrop{next_drop};
+                if (!in_set(visited, next_del)
+                    && !in_set(logical_states, ldel)) {
+                    next_del.history.push_back(del);
+                    ret.push_back(next_del);
+                    logical_states.insert(ldel);
+                } else {
+                    del->ref_dec();
+                }
+                if (!in_set(visited, next_drop) && drop->dropped->may_drop
+                    && !in_set(logical_states, ldrop)) {
+                    next_drop.history.push_back(drop);
+                    ret.push_back(next_drop);
+                    logical_states.insert(ldrop);
+                } else {
+                    drop->ref_dec();
                 }
             } else {
-                d->ref_dec();
+                if (!in_set(visited, next_del)) {
+                    next_del.history.push_back(del);
+                    ret.push_back(next_del);
+                } else {
+                    del->ref_dec();
+                }
+                if (!in_set(visited, next_drop) && drop->dropped->may_drop) {
+                    next_drop.history.push_back(drop);
+                    ret.push_back(next_drop);
+                } else {
+                    drop->ref_dec();
+                }
             }
         }
         if (!n.messages.size()) terminating.insert(n);

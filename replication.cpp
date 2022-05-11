@@ -1,5 +1,6 @@
 #include <random>
 #include "model.hpp"
+#include "unistd.h"
 
 // An implementation of n-way replication, inspired by the P# paper
 
@@ -212,10 +213,56 @@ struct Node : Machine {
     }
 };
 
-int main() {
-    // Argument parsing - maybe later!!
+void print_usage(const char* progname) {
+    fprintf(stderr, "usage: %s [-h] [-n nodes] [-r rounds]\n"
+                    "   -h: print this help message and exit\n"
+                    "   -n: number of replication nodes; defaults to 3\n"
+                    "   -r: number of data items to send; defaults to 1\n",
+                    progname);
+}
+
+int main(int argc, char** argv) {
+    // Parse args
     size_t nodes = 3;
     size_t rounds = 1;
+    int c;
+    char* end;
+    while ((c = getopt(argc, argv, "hn:r:")) != -1) {
+        switch(c) {
+            case 'h':
+                print_usage(argv[0]);
+                return 0;
+            case 'n':
+                end = nullptr;
+                nodes = strtoul(optarg, &end, 10);
+                if (*end) {
+                    fprintf(stderr, "%s: invalid number of nodes %s\n",
+                            argv[0], optarg);
+                    print_usage(argv[0]);
+                    return 1;
+                }
+                break;
+            case 'r':
+                end = nullptr;
+                rounds = strtoul(optarg, &end, 10);
+                if (*end) {
+                    fprintf(stderr, "%s: invalid number of data items %s\n",
+                            argv[0], optarg);
+                    print_usage(argv[0]);
+                    return 1;
+                }
+                break;
+            default:
+                print_usage(argv[0]);
+                return 1;
+        }
+    }
+    if (optind != argc) {
+        fprintf(stderr, "%s: too many arguments\n", argv[0]);
+        print_usage(argv[0]);
+        return 1;
+    }
+
     std::vector<data_t> data;
     std::mt19937_64 r;
     for (size_t i = 0; i < rounds; ++i) {
