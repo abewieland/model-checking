@@ -198,11 +198,11 @@ std::set<SystemState> Model::run(int max_depth, bool exclude_symmetries,
                                  bool print) {
     std::set<SystemState> terminating;
     int depth = 0;
-    int nodes_seen = 0;
+    size_t nodes_seen = 0;
 
     while ((max_depth < 0 || depth <= max_depth) && !pending.empty()) {
         if (print) {
-            printf("Depth searched: %d\n    Total nodes explored: %d\n"
+            printf("Depth searched: %d\n    Total nodes explored: %lu\n"
                    "    Unique nodes visited: %lu\n    Frontier size: %lu\n",
                    depth, nodes_seen, visited.size(), pending.size());
             printf("    Sample queue length: %lu\n", pending[0].messages.size());
@@ -241,5 +241,7 @@ std::set<SystemState> Model::run(int max_depth, bool exclude_symmetries,
                                     terminating, visited);
         ++depth;
     }
+    printf("Terminating depth: %d\n", depth - 1);
+    printf("Total nodes explored: %lu\n", nodes_seen);
     return terminating;
 }
