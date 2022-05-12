@@ -1,4 +1,3 @@
-#include <time.h>
 #include "model.hpp"
 
 // A simple example of two machines, one continuously sending a value to the

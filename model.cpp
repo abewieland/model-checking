@@ -189,8 +189,8 @@ Model::Model(std::vector<Machine*> m, std::vector<Predicate> i) : invariants(i) 
     // Visit the initial state first.
     pending.push_back(s);
 
-    printf("Initialized a new model with %lu machines and %lu invariants.\n",
-           s.machines.size(), invariants.size());
+    //printf("Initialized a new model with %lu machines and %lu invariants.\n",
+    //       s.machines.size(), invariants.size());
 }
 
 std::set<SystemState> Model::run(int max_depth, bool exclude_symmetries,

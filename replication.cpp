@@ -1,6 +1,5 @@
 #include <random>
 #include "model.hpp"
-#include "unistd.h"
 
 // An implementation of n-way replication, inspired by the P# paper
 
@@ -222,10 +221,15 @@ struct Node : Machine {
 };
 
 void print_usage(const char* progname) {
-    fprintf(stderr, "usage: %s [-h] [-n nodes] [-r rounds]\n"
+    fprintf(stderr, "usage: %s [OPTIONS]\n"
                     "   -h: print this help message and exit\n"
                     "   -n: number of replication nodes; defaults to 3\n"
-                    "   -r: number of data items to send; defaults to 1\n",
+                    "   -r: number of data items to send; defaults to 1\n"
+                    "   -o: don't use symmetry optimization; default is to\n"
+                    "   -q: don't print anything; default is to\n"
+                    "   -d: maximum depth, or -1 for none; defaults to -1\n"
+                    "   -t: time the run; default is not to\n"
+                    "Note that -t implies -q\n",
                     progname);
 }
 
@@ -233,9 +237,13 @@ int main(int argc, char** argv) {
     // Parse args
     size_t nodes = 3;
     size_t rounds = 1;
+    bool sym = true;
+    bool print = true;
+    bool time = false;
+    int depth = -1;
     int c;
     char* end;
-    while ((c = getopt(argc, argv, "hn:r:")) != -1) {
+    while ((c = getopt(argc, argv, "hn:r:oqd:t")) != -1) {
         switch(c) {
             case 'h':
                 print_usage(argv[0]);
@@ -259,6 +267,24 @@ int main(int argc, char** argv) {
                     print_usage(argv[0]);
                     return 1;
                 }
+                break;
+            case 'o':
+                sym = false;
+                break;
+            case 'd':
+                end = nullptr;
+                depth = strtol(optarg, &end, 10);
+                if (*end || depth < -1) {
+                    fprintf(stderr, "%s: invalid maximum depth %s\n",
+                            argv[0], optarg);
+                    print_usage(argv[0]);
+                    return 1;
+                }
+                break;
+            case 't':
+                time = true;
+            case 'q':
+                print = false;
                 break;
             default:
                 print_usage(argv[0]);
@@ -297,7 +323,27 @@ int main(int argc, char** argv) {
     i.push_back(Predicate{"Ack not received before replicated", pred});
     Model model{m, i};
 
-    std::set<SystemState> res = model.run();
-    printf("Simluation exited with %lu terminating states.\n", res.size());
+    struct timespec re;
+    struct timespec start;
+    if (time) {
+        clock_getres(CLOCK_MONOTONIC_RAW, &re);
+        clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+    }
+    std::set<SystemState> res
+        = model.run(depth, sym, std::vector<Predicate>{}, print);
+    if (time) {
+        struct timespec end;
+        clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+        // Don't report with more accuracy than the clock has
+        time_t sec = end.tv_sec - start.tv_sec;
+        if (re.tv_sec) sec -= sec % re.tv_sec;
+        long nsec = end.tv_nsec - start.tv_nsec;
+        if (re.tv_nsec) nsec -= nsec % re.tv_nsec;
+        nsec += sec * 1000000000;
+        printf("Elapsed time (ns): %ld\n", nsec);
+    }
+
+    if (print)
+        printf("Simluation exited with %lu terminating states.\n", res.size());
     return 0;
 }

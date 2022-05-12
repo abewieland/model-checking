@@ -1,6 +1,3 @@
-#include <time.h>
-#include <iostream>
-#include <limits.h>
 #include "model.hpp"
 
 #define MSG_PREPARE        1
@@ -246,41 +243,149 @@ struct StateMachine : Machine {
         if (int r = selected_n - m->selected_n) return r;
         if (int r = selected_v_prime - m->selected_v_prime) return r;
         if (int r = final_value - m->final_value) return r;
-        if (long r = prepares_received.size() - m->prepares_received.size()) return r;
-        if (long r = accepts_received.size() - m->accepts_received.size()) return r;
-        for(auto it1 = prepares_received.begin(), it2 = m->prepares_received.begin(); it1 != prepares_received.end() && it2 != m->prepares_received.end(); ++it1, ++it2) {
-            if (long r = (*it1)->compare((dynamic_cast<Message*>(*it2)))) return r;
+        if (long r = prepares_received.size() - m->prepares_received.size())
+            return r;
+        if (long r = accepts_received.size() - m->accepts_received.size())
+            return r;
+        for (auto it1 = prepares_received.begin(),
+                  it2 = m->prepares_received.begin();
+            it1 != prepares_received.end() && it2 != m->prepares_received.end();
+            ++it1, ++it2) {
+            if (long r = (*it1)->compare((dynamic_cast<Message*>(*it2))))
+                return r;
         }
-        for(auto it1 = accepts_received.begin(), it2 = m->accepts_received.begin(); it1 != accepts_received.end() && it2 != m->accepts_received.end(); ++it1, ++it2) {
-            if (long r = (*it1)->compare((dynamic_cast<Message*>(*it2)))) return r;
+        for (auto it1 = accepts_received.begin(),
+                  it2 = m->accepts_received.begin();
+            it1 != accepts_received.end() && it2 != m->accepts_received.end();
+            ++it1, ++it2) {
+            if (long r = (*it1)->compare((dynamic_cast<Message*>(*it2))))
+                return r;
         }
         return 0;
     }
 };
 
-int main() {
-    int num_machines = 3;
-    int proposer = 0;
-    int proposer2 = 0;
+void print_usage(const char* progname) {
+    fprintf(stderr, "usage: %s [OPTIONS]\n"
+                    "   -h: print this help message and exit\n"
+                    "   -n: number of machines; defaults to 3\n"
+                    "   -p: index of first proposer; defaults to 0\n"
+                    "   -P: index of second proposer; defaults to 0\n"
+                    "   -o: don't use symmetry optimization; default is to\n"
+                    "   -q: don't print anything; default is to\n"
+                    "   -d: maximum depth, or -1 for none; defaults to -1\n"
+                    "   -t: time the run; default is not to\n"
+                    "Note that unless overridden, -t implies -q\n",
+                    progname);
+}
+
+int main(int argc, char** argv) {
+    // Parse args
+    size_t n = 3;
+    size_t proposer = 0;
+    size_t proposer2 = 0;
+    bool sym = true;
+    bool print = true;
+    bool time = false;
+    int depth = -1;
+    int c;
+    char* end;
+    while ((c = getopt(argc, argv, "hn:p:P:oqd:t")) != -1) {
+        switch(c) {
+            case 'h':
+                print_usage(argv[0]);
+                return 0;
+            case 'n':
+                end = nullptr;
+                n = strtoul(optarg, &end, 10);
+                if (*end) {
+                    fprintf(stderr, "%s: invalid number of machines %s\n",
+                            argv[0], optarg);
+                    print_usage(argv[0]);
+                    return 1;
+                }
+                break;
+            case 'p':
+                end = nullptr;
+                proposer = strtoul(optarg, &end, 10);
+                if (*end || proposer >= n) {
+                    fprintf(stderr, "%s: invalid first proposer %s\n",
+                            argv[0], optarg);
+                    print_usage(argv[0]);
+                    return 1;
+                }
+                break;
+            case 'P':
+                end = nullptr;
+                proposer2 = strtoul(optarg, &end, 10);
+                if (*end || proposer2 >= n) {
+                    fprintf(stderr, "%s: invalid second proposer %s\n",
+                            argv[0], optarg);
+                    print_usage(argv[0]);
+                    return 1;
+                }
+                break;
+            case 'o':
+                sym = false;
+                break;
+            case 'd':
+                end = nullptr;
+                depth = strtol(optarg, &end, 10);
+                if (*end || depth < -1) {
+                    fprintf(stderr, "%s: invalid maximum depth %s\n",
+                            argv[0], optarg);
+                    print_usage(argv[0]);
+                    return 1;
+                }
+                break;
+            case 't':
+                time = true;
+            case 'q':
+                print = false;
+                break;
+            default:
+                print_usage(argv[0]);
+                return 1;
+        }
+    }
+    if (optind != argc) {
+        fprintf(stderr, "%s: too many arguments\n", argv[0]);
+        print_usage(argv[0]);
+        return 1;
+    }
 
     std::vector<Machine*> m;
-
-    for(int i = 0; i < num_machines; i++) {
-        m.push_back(new StateMachine(i, num_machines, proposer == i || proposer2 == i));
+    for(size_t i = 0; i < n; i++) {
+        m.push_back(new StateMachine(i, n, proposer == i || proposer2 == i));
     }
-
     Model model{m};
-    printf("Constructed\n");
 
-    std::set<SystemState> res = model.run(19, true);
-
-    for(SystemState i : res) {
-        // for(Machine * m : i.machines) {
-            StateMachine* sm = dynamic_cast<StateMachine*>(i.machines[0]);
-            printf("Learned value of %d\n", sm->final_value);
-        // }
+    struct timespec re;
+    struct timespec start;
+    if (time) {
+        clock_getres(CLOCK_MONOTONIC_RAW, &re);
+        clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+    }
+    std::set<SystemState> res
+        = model.run(depth, sym, std::vector<Predicate>{}, print);
+    if (time) {
+        struct timespec end;
+        clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+        // Don't report with more accuracy than the clock has
+        time_t sec = end.tv_sec - start.tv_sec;
+        if (re.tv_sec) sec -= sec % re.tv_sec;
+        long nsec = end.tv_nsec - start.tv_nsec;
+        if (re.tv_nsec) nsec -= nsec % re.tv_nsec;
+        nsec += sec * 1000000000;
+        printf("Elapsed time (ns): %ld\n", nsec);
     }
 
-    printf("Simluation exited with %lu terminating states.\n", res.size());
+    if (print) {
+        printf("Simluation exited with %lu terminating states.\n", res.size());
+        for(const SystemState& i : res) {
+                StateMachine* sm = dynamic_cast<StateMachine*>(i.machines[0]);
+                printf("Learned value of %d\n", sm->final_value);
+        }
+    }
     return 0;
 }

@@ -6,7 +6,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <typeinfo>
+#include <time.h>
+#include <unistd.h>
 
 // Machine identifiers
 typedef unsigned id_t;

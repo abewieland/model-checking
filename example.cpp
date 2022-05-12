@@ -1,5 +1,4 @@
 #include "model.hpp"
-#include "unistd.h"
 
 // A simple example of many sender machines sending messages to a single
 // receiver. Due to network asynchrony, the receiver may receive them in any
